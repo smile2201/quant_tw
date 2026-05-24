@@ -4,6 +4,24 @@ config/settings.py
 """
 import os
 
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  FinMind 付費設定區（升級後只改這裡，其他不用動）                              ║
+# ╠══════════════════════════════════════════════════════════════════════════════╣
+# ║  免費帳號（register）：                                                       ║
+# ║    FINMIND_PLAN  = "register"                                                ║
+# ║    FINMIND_PRICE_DATASET = "price"          ← 一般股價（無還原）              ║
+# ║    FINMIND_RATE_LIMIT    = 600              ← 600次/小時                     ║
+# ║                                                                              ║
+# ║  付費帳號（sponsor）：                                                        ║
+# ║    FINMIND_PLAN  = "sponsor"                                                 ║
+# ║    FINMIND_PRICE_DATASET = "price_adj"      ← 還原股價（回測更準）            ║
+# ║    FINMIND_RATE_LIMIT    = 6000             ← 6000次/小時                    ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+FINMIND_PLAN          = "register"   # 升級後改成 "sponsor"
+FINMIND_PRICE_DATASET = "price"      # 升級後改成 "price_adj"
+FINMIND_RATE_LIMIT    = 600          # 升級後改成 6000
+
 # ─── 環境偵測（自動判斷本機 or Colab）─────────────────────────────────────────
 IS_COLAB = os.path.exists("/content/drive")
 
@@ -22,10 +40,9 @@ RESULTS_DIR      = os.path.join(PROJECT_ROOT, "results")
 # ─── FinMind API ──────────────────────────────────────────────────────────────
 # token 從環境變數讀取，不寫死在程式碼
 # 設定方式：export FINMIND_TOKEN="你的token"
-FINMIND_TOKEN      = os.environ.get("FINMIND_TOKEN", "")
-FINMIND_RATE_LIMIT = 600          # 次/小時（已驗證帳號上限）
-FINMIND_BACKOFF    = 65 * 60      # quota 用盡後退避秒數（65分鐘）
-CACHE_YEARS        = 3            # 一次抓幾年資料存 cache
+FINMIND_TOKEN   = os.environ.get("FINMIND_TOKEN", "")
+FINMIND_BACKOFF = 65 * 60      # quota 用盡後退避秒數（65分鐘）
+CACHE_YEARS     = 3            # 一次抓幾年資料存 cache
 
 # ─── SCREENER 參數 ────────────────────────────────────────────────────────────
 SCREENER = {
