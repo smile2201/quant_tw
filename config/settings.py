@@ -4,19 +4,19 @@ config/settings.py
 """
 import os
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  FinMind 付費設定區（升級後只改這裡，其他不用動）                              ║
-# ╠══════════════════════════════════════════════════════════════════════════════╣
-# ║  免費帳號（register）：                                                       ║
-# ║    FINMIND_PLAN  = "register"                                                ║
-# ║    FINMIND_PRICE_DATASET = "price"          ← 一般股價（無還原）              ║
-# ║    FINMIND_RATE_LIMIT    = 600              ← 600次/小時                     ║
-# ║                                                                              ║
-# ║  付費帳號（sponsor）：                                                        ║
-# ║    FINMIND_PLAN  = "sponsor"                                                 ║
-# ║    FINMIND_PRICE_DATASET = "price_adj"      ← 還原股價（回測更準）            ║
-# ║    FINMIND_RATE_LIMIT    = 6000             ← 6000次/小時                    ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  FinMind 付費設定區（升級後只改這裡，其他不用動）                ║
+# ╠══════════════════════════════════════════════════════════════════╣
+# ║  免費帳號（register）：                                          ║
+# ║    FINMIND_PLAN          = "register"                            ║
+# ║    FINMIND_PRICE_DATASET = "price"      ← 一般股價（無還原）     ║
+# ║    FINMIND_RATE_LIMIT    = 600          ← 600次/小時             ║
+# ║                                                                  ║
+# ║  付費帳號（sponsor）：                                           ║
+# ║    FINMIND_PLAN          = "sponsor"                             ║
+# ║    FINMIND_PRICE_DATASET = "price_adj"  ← 還原股價（回測更準）   ║
+# ║    FINMIND_RATE_LIMIT    = 6000         ← 6000次/小時            ║
+# ╚══════════════════════════════════════════════════════════════════╝
 
 FINMIND_PLAN          = "register"   # 升級後改成 "sponsor"
 FINMIND_PRICE_DATASET = "price"      # 升級後改成 "price_adj"
@@ -76,39 +76,39 @@ SCREENER = {
 
 # ─── BACKTEST 參數 ────────────────────────────────────────────────────────────
 BACKTEST = {
-    "start_date":          "2022-01-01",
-    "end_date":            "2024-12-31",
-    "initial_capital":     1_000_000,   # 初始資金（新台幣）
-    "risk_free_rate":      0.015,        # 無風險利率 1.5%（計算 Sharpe 用）
+    "start_date":      "2022-01-01",
+    "end_date":        "2024-12-31",
+    "initial_capital": 1_000_000,   # 初始資金（新台幣）
+    "risk_free_rate":  0.015,       # 無風險利率 1.5%（計算 Sharpe 用）
 
     # 股票池（預設用台灣50成分股，避免全市場跑太慢）
-    "universe":            "tw50",       # 可改 "all"（全市場）或自訂 list
-    "max_positions":       10,           # 最多同時持有幾檔
-    "position_size":       0.1,          # 每檔佔總資金比例（10%）
+    "universe":        "tw50",      # 可改 "all"（全市場）或自訂 list
+    "max_positions":   10,          # 最多同時持有幾檔
+    "position_size":   0.1,         # 每檔佔總資金比例（10%）
 }
 
 # ─── EXECUTION 參數 ───────────────────────────────────────────────────────────
 EXECUTION = {
     # 手續費
-    "commission_buy":      0.001425,    # 買進手續費 0.1425%
-    "commission_sell":     0.001425,    # 賣出手續費 0.1425%
-    "tax_sell":            0.003,       # 證交稅 0.3%（賣出時）
+    "commission_buy":            0.001425,  # 買進手續費 0.1425%
+    "commission_sell":           0.001425,  # 賣出手續費 0.1425%
+    "tax_sell":                  0.003,     # 證交稅 0.3%（賣出時）
 
     # 滑價（不對稱）
-    "slippage_buy":        0.002,       # 買進 0.2%
-    "slippage_sell":       0.003,       # 賣出 0.3%
+    "slippage_buy":              0.002,     # 買進 0.2%
+    "slippage_sell":             0.003,     # 賣出 0.3%
 
     # 部位上限（流動性保護）
-    "max_volume_ratio":    0.005,       # 單筆部位 ≤ 當日成交量 0.5%
+    "max_volume_ratio":          0.005,     # 單筆部位 ≤ 當日成交量 0.5%
 
-    # 三模式倍率（相對 realistic 的調整）
-    "ideal_slippage_mult":     0.0,     # ideal = 無滑價
-    "pessimistic_slippage_mult": 1.5,  # pessimistic = 滑價 × 1.5
+    # 三模式倍率
+    "ideal_slippage_mult":       0.0,       # ideal = 無滑價
+    "pessimistic_slippage_mult": 1.5,       # pessimistic = 滑價 × 1.5
 }
 
 # ─── RUNNER 參數 ──────────────────────────────────────────────────────────────
 RUNNER = {
     # Mac 雙核心 → 保留1核給系統，用1核跑運算
-    # 改成 Colab 時自動切換（Colab 約2核）
+    # Colab 環境自動切換為2核
     "workers": 1 if not IS_COLAB else 2,
 }
