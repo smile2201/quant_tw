@@ -174,8 +174,10 @@ def run(price_data: dict) -> pd.DataFrame:
             "Open":   "open",
             "high":   "high",
             "High":   "high",
+            "max":    "high",   # FinMind price dataset
             "low":    "low",
             "Low":    "low",
+            "min":    "low",    # FinMind price dataset
         })
         df = df.rename(columns=col_map)
         if "date" in df.columns:
