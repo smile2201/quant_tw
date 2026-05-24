@@ -164,9 +164,6 @@ def run(data: dict, cutoff_date: str = None) -> pd.DataFrame:
             }
         }
         cutoff_date: 若指定，只用 <= 此日期的資料（動態回測用）
-
-    Returns:
-        DataFrame，columns: [stock_id, fund_score, signals]
     """
     records = []
     for sid, d in data.items():

@@ -39,8 +39,8 @@ def run(
     stock_ids = list(price_data.keys())
 
     # ── 各模組評分 ─────────────────────────────────────────────────────────────
-    tech_df  = tech.run(price_data, cutoff_date=cutoff_date) if use_tech  else _zero_df(stock_ids, "tech_score")
-    fund_df  = fund.run(fund_data,  cutoff_date=cutoff_date) if use_fund  else _zero_df(stock_ids, "fund_score")
+    tech_df = tech.run(price_data, cutoff_date=cutoff_date) if use_tech else _zero_df(stock_ids, "tech_score")
+    fund_df = fund.run(fund_data,  cutoff_date=cutoff_date) if use_fund else _zero_df(stock_ids, "fund_score")
     # 事件面：動態回測時無歷史新聞，改用中性分（50）避免未來資訊偏差
     if cutoff_date:
         event_df = _zero_df(stock_ids, "event_score")
@@ -59,9 +59,9 @@ def run(
                             "tech_signals":"","fund_signals":"","events":""})
 
     # ── 動態權重（停用模組時重新分配）──────────────────────────────────────────
-    w_tech  = SCREENER["weight_technical"]  if use_tech  else 0
+    w_tech  = SCREENER["weight_technical"]   if use_tech  else 0
     w_fund  = SCREENER["weight_fundamental"] if use_fund  else 0
-    w_event = SCREENER["weight_event"]      if use_event else 0
+    w_event = SCREENER["weight_event"]       if use_event else 0
     total_w = w_tech + w_fund + w_event
     if total_w == 0:
         total_w = 1

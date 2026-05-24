@@ -253,23 +253,24 @@ def _days_between(entry_date: str, current_date: str, all_dates: list) -> int:
 # ─── 動態訊號版本 ──────────────────────────────────────────────────────────────
 
 def run_single_dynamic(
-    price_data:  dict,
-    fund_data:   dict,
+    price_data:      dict,
+    fund_data:       dict,
     news_df,
-    mode:        str = "realistic",
+    mode:            str = "realistic",
     initial_capital: Optional[float] = None,
     rescore_every:   int = 5,
 ) -> BacktestResult:
     """
     動態訊號回測：每 rescore_every 個交易日用當天為止的資料重新評分。
+    解決 Look-ahead Bias（前視偏差）。
 
     Args:
-        price_data:    {stock_id: price_df}
-        fund_data:     {stock_id: {"financial":df, "dividend":df, "revenue":df}}
-        news_df:       TWSE 重大訊息（事件面在動態模式用中性分，不使用此參數）
-        mode:          "ideal" | "realistic" | "pessimistic"
+        price_data:      {stock_id: price_df}
+        fund_data:       {stock_id: {"financial":df, "dividend":df, "revenue":df}}
+        news_df:         TWSE 重大訊息（動態模式用中性分，不使用此參數）
+        mode:            "ideal" | "realistic" | "pessimistic"
         initial_capital: 初始資金
-        rescore_every: 每幾個交易日重新評分（預設 5 = 每週）
+        rescore_every:   每幾個交易日重新評分（預設 5 = 每週）
     """
     from strategy import hybrid_screener
 
@@ -315,10 +316,12 @@ def run_single_dynamic(
 
     for i, date in enumerate(all_dates):
 
-        # ── 每 rescore_every 天重新評分 ────────────────────────────────────────
+        # ── 每 rescore_every 天用截至當日資料重新評分 ────────────────────────
         if i % rescore_every == 0:
-            signals    = hybrid_screener.run(price_data, fund_data, news_df,
-                                             cutoff_date=date)
+            signals    = hybrid_screener.run(
+                price_data, fund_data, news_df,
+                cutoff_date=date
+            )
             candidates = (signals[signals["final_score"] >= threshold]
                           .sort_values("final_score", ascending=False)
                           ["stock_id"].tolist()) if not signals.empty else []
@@ -326,7 +329,7 @@ def run_single_dynamic(
         # ── 賣出邏輯 ──────────────────────────────────────────────────────────
         to_sell = []
         for sid, pos in positions.items():
-            days_held      = _days_between(pos.entry_date, date, all_dates)
+            days_held       = _days_between(pos.entry_date, date, all_dates)
             still_candidate = sid in candidates[:max_pos]
             if days_held >= 20 or not still_candidate:
                 to_sell.append(sid)
@@ -396,13 +399,13 @@ def run_single_dynamic(
 
 
 def run_three_modes_dynamic(
-    price_data:  dict,
-    fund_data:   dict,
+    price_data:      dict,
+    fund_data:       dict,
     news_df,
     initial_capital: Optional[float] = None,
     rescore_every:   int = 5,
 ) -> dict:
-    """動態訊號三模式回測"""
+    """動態訊號三模式回測（無 Look-ahead Bias）"""
     results = {}
     for mode in ["ideal", "realistic", "pessimistic"]:
         print(f"  [dynamic backtest] 跑 {mode} 模式（每 {rescore_every} 日重新評分）...")
