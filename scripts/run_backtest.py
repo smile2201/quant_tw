@@ -14,7 +14,7 @@ from config.settings import BACKTEST, FINMIND_PRICE_DATASET
 from data.finmind_fetcher import fetch_stock, get_tw50_stocks
 from data.twse_fetcher import load_material_news
 from strategy import hybrid_screener
-from backtest.engine import run_three_modes, compare_modes
+from backtest.engine import run_three_modes_dynamic, compare_modes
 
 RESULTS_DIR = Path(os.path.dirname(os.path.dirname(__file__))) / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -40,12 +40,9 @@ def run(stock_ids: list = None) -> dict:
             "revenue":   fetch_stock(sid, "revenue"),
         }
 
-    print("\n計算評分訊號...")
+    print("\n開始動態回測（三模式，每5個交易日重新評分）...")
     news_df = load_material_news()
-    signals = hybrid_screener.run(price_data, fund_data, news_df)
-
-    print("\n開始回測（三模式）...")
-    results = run_three_modes(signals, price_data)
+    results = run_three_modes_dynamic(price_data, fund_data, news_df)
 
     comparison = compare_modes(results)
     print(f"\n{'='*60}")

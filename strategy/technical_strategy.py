@@ -152,12 +152,13 @@ def score_stock(df: pd.DataFrame) -> float:
     return float(max(0.0, min(100.0, score)))
 
 
-def run(price_data: dict) -> pd.DataFrame:
+def run(price_data: dict, cutoff_date: str = None) -> pd.DataFrame:
     """
     批次計算所有股票的技術面評分
 
     Args:
-        price_data: {stock_id: DataFrame}（還原股價日K）
+        price_data:  {stock_id: DataFrame}（還原股價日K）
+        cutoff_date: 若指定，只用 <= 此日期的資料（動態回測用）
 
     Returns:
         DataFrame，columns: [stock_id, tech_score, signals]
@@ -182,6 +183,8 @@ def run(price_data: dict) -> pd.DataFrame:
         df = df.rename(columns=col_map)
         if "date" in df.columns:
             df = df.sort_values("date")
+            if cutoff_date:
+                df = df[df["date"] <= cutoff_date]
 
         score = score_stock(df)
 

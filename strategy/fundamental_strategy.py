@@ -151,7 +151,7 @@ def score_stock(financial_df: pd.DataFrame,
     ))
 
 
-def run(data: dict) -> pd.DataFrame:
+def run(data: dict, cutoff_date: str = None) -> pd.DataFrame:
     """
     批次計算所有股票的基本面評分
 
@@ -163,15 +163,21 @@ def run(data: dict) -> pd.DataFrame:
                 "revenue":   DataFrame,
             }
         }
+        cutoff_date: 若指定，只用 <= 此日期的資料（動態回測用）
 
     Returns:
         DataFrame，columns: [stock_id, fund_score, signals]
     """
     records = []
     for sid, d in data.items():
-        fin = d.get("financial", pd.DataFrame())
-        div = d.get("dividend",  pd.DataFrame())
-        rev = d.get("revenue",   pd.DataFrame())
+        def _slice(df):
+            if cutoff_date and not df.empty and "date" in df.columns:
+                return df[df["date"] <= cutoff_date]
+            return df
+
+        fin = _slice(d.get("financial", pd.DataFrame()))
+        div = _slice(d.get("dividend",  pd.DataFrame()))
+        rev = _slice(d.get("revenue",   pd.DataFrame()))
 
         eps_s  = score_eps(fin)
         div_s  = score_dividend(div)

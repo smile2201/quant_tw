@@ -17,6 +17,7 @@ def run(
     use_tech:    bool = True,
     use_fund:    bool = True,
     use_event:   bool = True,
+    cutoff_date: str  = None,
 ) -> pd.DataFrame:
     """
     混合評分主函式
@@ -28,6 +29,7 @@ def run(
         use_tech:    是否啟用技術面（ablation 用）
         use_fund:    是否啟用基本面
         use_event:   是否啟用事件驅動
+        cutoff_date: 若指定，只用 <= 此日期的資料；事件面改用中性分（動態回測用）
 
     Returns:
         DataFrame，columns: [stock_id, final_score, tech_score, fund_score,
@@ -37,9 +39,13 @@ def run(
     stock_ids = list(price_data.keys())
 
     # ── 各模組評分 ─────────────────────────────────────────────────────────────
-    tech_df  = tech.run(price_data)  if use_tech  else _zero_df(stock_ids, "tech_score")
-    fund_df  = fund.run(fund_data)   if use_fund  else _zero_df(stock_ids, "fund_score")
-    event_df = event.run(news_df, stock_ids) if use_event else _zero_df(stock_ids, "event_score")
+    tech_df  = tech.run(price_data, cutoff_date=cutoff_date) if use_tech  else _zero_df(stock_ids, "tech_score")
+    fund_df  = fund.run(fund_data,  cutoff_date=cutoff_date) if use_fund  else _zero_df(stock_ids, "fund_score")
+    # 事件面：動態回測時無歷史新聞，改用中性分（50）避免未來資訊偏差
+    if cutoff_date:
+        event_df = _zero_df(stock_ids, "event_score")
+    else:
+        event_df = event.run(news_df, stock_ids) if use_event else _zero_df(stock_ids, "event_score")
 
     # ── 合併 ──────────────────────────────────────────────────────────────────
     result = pd.DataFrame({"stock_id": stock_ids})
