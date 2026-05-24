@@ -51,9 +51,10 @@ SCREENER = {
     "weight_fundamental":  0.40,
     "weight_event":        0.20,
 
-    # 評分門檻
-    "threshold_watch":     60,    # 觀察股
-    "threshold_strong":    75,    # 強力候選
+    # 評分門檻（免費方案：financial 拿不到，分數普遍偏低，用 40/55）
+    # 升級付費後改回 60/75
+    "threshold_watch":     40,    # 觀察股
+    "threshold_strong":    55,    # 強力候選
 
     # 技術面指標參數
     "ma_short":            5,

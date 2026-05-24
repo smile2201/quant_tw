@@ -11,7 +11,7 @@ from typing import Optional
 
 from backtest.execution import Trade, Mode, execute_trade
 from backtest.metrics import summarize
-from config.settings import BACKTEST, EXECUTION
+from config.settings import BACKTEST, EXECUTION, SCREENER
 
 
 @dataclass
@@ -77,10 +77,16 @@ def run_single(
         if df.empty or "date" not in df.columns:
             continue
         df = df.copy().sort_values("date")
+        # 相容 FinMind price dataset（max/min）與 price_adj（high/low）
+        if "high" not in df.columns and "max" in df.columns:
+            df["high"] = df["max"]
+        if "low" not in df.columns and "min" in df.columns:
+            df["low"] = df["min"]
         price_lookup[sid] = df.set_index("date")
 
-    # 候選股（依評分排序）
-    candidates = (signals[signals["final_score"] >= 60]
+    # 候選股（依評分排序，門檻從 settings 讀取）
+    threshold  = SCREENER.get("threshold_watch", 60)
+    candidates = (signals[signals["final_score"] >= threshold]
                   .sort_values("final_score", ascending=False)
                   ["stock_id"].tolist()) if not signals.empty else []
 
