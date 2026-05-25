@@ -1,0 +1,36 @@
+name: 每日選股
+
+on:
+  schedule:
+    - cron: '05 7 * * 1-5'   # 台灣時間 15:05（UTC+8），週一到週五
+  workflow_dispatch:           # 允許手動觸發
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run screener
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: python scripts/run_screener.py
+
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/
+          git diff --cached --quiet || git commit -m "auto: $(date +'%Y-%m-%d') 選股結果"
+          git push
