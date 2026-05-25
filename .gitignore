@@ -1,8 +1,11 @@
 data/cache/
 data/empty_markers/
 data/twse/
+data/users.json
 results/
 __pycache__/
 *.pyc
 .DS_Store
 .env
+.streamlit/secrets.toml
+logs/
