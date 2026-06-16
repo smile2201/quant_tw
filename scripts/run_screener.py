@@ -14,6 +14,7 @@ from config.settings import FINMIND_PRICE_DATASET
 from data.finmind_fetcher import fetch_stock, get_tw50_stocks
 from data.twse_fetcher import fetch_material_news, load_material_news
 from strategy import hybrid_screener
+from notify import line_bot
 
 RESULTS_DIR_PATH = Path(os.path.dirname(os.path.dirname(__file__))) / "results"
 RESULTS_DIR_PATH.mkdir(exist_ok=True)
@@ -59,6 +60,9 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     print(f"強力候選（{len(strong)} 檔）：{', '.join(strong['stock_id'].tolist())}")
     print(f"觀察股  （{len(watch)} 檔）：{', '.join(watch['stock_id'].tolist())}")
     print(f"{'='*50}")
+
+    msg = line_bot.build_message(result, today)
+    line_bot.send(msg)
 
     return result
 
