@@ -34,18 +34,23 @@ def build_message(result_df, date: str) -> str:
     watch  = result_df[result_df["tier"] == "觀察股"]
 
     lines = [
-        f"📈 {date} 台股選股結果",
+        f"📈 {date[:4]}/{date[4:6]}/{date[6:]} 台股選股結果",
         f"━━━━━━━━━━━━━━",
         f"💎 強力候選（{len(strong)} 檔）",
     ]
     for _, row in strong.iterrows():
-        lines.append(f"  {row['stock_id']}  評分 {row['final_score']}")
+        lines.append(f"\n▶ {row['stock_id']}  總分 {int(row['final_score'])} 分")
+        lines.append(f"  📊 技術 {int(row['tech_score'])} | 基本 {int(row['fund_score'])} | 事件 {int(row['event_score'])}")
+        if row.get("tech_signals"):
+            lines.append(f"  🔔 {row['tech_signals']}")
+        if row.get("fund_signals") and row["fund_signals"] != "無":
+            lines.append(f"  📋 {row['fund_signals']}")
 
     lines += [
-        f"",
+        f"\n━━━━━━━━━━━━━━",
         f"👀 觀察股（{len(watch)} 檔）",
         "  " + "、".join(watch["stock_id"].tolist()),
-        f"",
-        f"共評估 {len(result_df)} 檔",
+        f"\n共評估 {len(result_df)} 檔",
+        f"⚠️ 僅供參考，非投資建議",
     ]
     return "\n".join(lines)
