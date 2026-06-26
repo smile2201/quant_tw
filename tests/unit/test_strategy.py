@@ -12,6 +12,8 @@ from strategy import technical_strategy as tech
 from strategy import fundamental_strategy as fund
 from strategy import event_strategy as event
 from strategy import hybrid_screener as hybrid
+from strategy import margin_strategy as margin
+from strategy import news_strategy as news
 
 
 # ─── Mock 資料工廠 ─────────────────────────────────────────────────────────────
@@ -239,17 +241,16 @@ def test_hybrid_tier_labels():
 
 
 def test_hybrid_ablation_tech_only():
-    """只開技術面時，fund_score 仍存在但不影響最終分數"""
+    """只開技術面時，final_score 應等於 tech_score"""
     price_data = {"2330": make_price_df(120, "up")}
     fund_data  = {"2330": {"financial": make_financial_df(),
                            "dividend":  make_dividend_df(),
                            "revenue":   make_revenue_df()}}
+    # 明確關掉其他模組（含 chip），避免 neutral=50 混入
     r_tech_only = hybrid.run(price_data, fund_data, pd.DataFrame(),
-                              use_tech=True, use_fund=False, use_event=False)
-    r_all       = hybrid.run(price_data, fund_data, pd.DataFrame(),
-                              use_tech=True, use_fund=True,  use_event=False)
-    # tech only 的 final_score 應等於 tech_score
-    t  = r_tech_only.iloc[0]
+                              use_tech=True, use_fund=False,
+                              use_event=False, use_chip=False)
+    t = r_tech_only.iloc[0]
     assert abs(t["final_score"] - t["tech_score"]) < 0.2, \
         f"tech only: final={t['final_score']}, tech={t['tech_score']}"
 
@@ -268,6 +269,135 @@ def test_hybrid_old_strategies_unaffected():
     fund_result2 = fund.run(fund_data)
     assert tech_result1.iloc[0]["tech_score"] == tech_result2.iloc[0]["tech_score"]
     assert fund_result1.iloc[0]["fund_score"] == fund_result2.iloc[0]["fund_score"]
+
+
+def make_margin_df(n=20, mp_today=500_000, ss_today=40_000,
+                   mp_limit=2_000_000) -> pd.DataFrame:
+    """產生模擬融資融券資料"""
+    dates = pd.date_range("2024-01-01", periods=n, freq="B")
+    base  = mp_today
+    return pd.DataFrame({
+        "date":                [d.strftime("%Y-%m-%d") for d in dates],
+        "MarginPurchaseToday": [int(base * (1 + i * 0.01)) for i in range(n)],
+        "ShortSaleToday":      [ss_today] * n,
+        "MarginPurchaseLimit": [mp_limit] * n,
+    })
+
+
+# ─── 融資融券測試 ──────────────────────────────────────────────────────────────
+
+def test_margin_score_range():
+    """融資融券評分應在 0~100"""
+    df    = make_margin_df()
+    score, _ = margin.score_margin(df)
+    assert 0 <= score <= 100, f"got {score}"
+
+
+def test_margin_low_short_ratio_bullish():
+    """低券資比（< 0.10）應得高分"""
+    df = make_margin_df(mp_today=1_000_000, ss_today=50_000)  # ratio=0.05
+    score, sigs = margin.score_margin(df)
+    assert score > 60, f"低券資比應高分，got {score}"
+    assert any("↓低" in s for s in sigs), "應有低券資比訊號"
+
+
+def test_margin_high_short_ratio_bearish():
+    """高券資比（> 0.25）應得低分"""
+    df = make_margin_df(mp_today=1_000_000, ss_today=300_000)  # ratio=0.30
+    score, sigs = margin.score_margin(df)
+    assert score < 50, f"高券資比應低分，got {score}"
+
+
+def test_margin_empty_returns_neutral():
+    """空資料應回傳 50（中性）"""
+    score, sigs = margin.score_margin(pd.DataFrame())
+    assert score == 50.0
+    assert sigs == []
+
+
+def test_margin_run_output_format():
+    """run() 應輸出含必要欄位的 DataFrame"""
+    margin_data = {"2330": make_margin_df(), "2317": pd.DataFrame()}
+    result = margin.run(margin_data, ["2330", "2317"])
+    assert "stock_id"       in result.columns
+    assert "margin_score"   in result.columns
+    assert "margin_signals" in result.columns
+    assert len(result) == 2
+
+
+def test_margin_integrated_into_chip():
+    """hybrid.run 傳入 margin_data 後 chip_score 應有所改變"""
+    price_data  = {"2330": make_price_df(120, "up")}
+    fund_data   = {"2330": {"financial": pd.DataFrame(),
+                            "dividend":  pd.DataFrame(),
+                            "revenue":   pd.DataFrame()}}
+    margin_data = {"2330": make_margin_df(mp_today=1_000_000, ss_today=50_000)}
+
+    r_no_margin = hybrid.run(price_data, fund_data, pd.DataFrame())
+    r_w_margin  = hybrid.run(price_data, fund_data, pd.DataFrame(),
+                             margin_data=margin_data)
+
+    chip_no = r_no_margin.iloc[0]["chip_score"]
+    chip_w  = r_w_margin.iloc[0]["chip_score"]
+    # 加了低券資比的融資資料後，籌碼分應提高
+    assert chip_w >= chip_no, f"有融資資料({chip_w}) 應 >= 無融資資料({chip_no})"
+
+
+# ─── 新聞情緒測試 ──────────────────────────────────────────────────────────────
+
+def test_news_positive_keywords():
+    """正面關鍵字新聞應得高分"""
+    news_list = [{"title": "台積電取得重大合約，目標價上調", "publishTime": 0}]
+    score, sig = news.score_news(news_list)
+    assert score > 50, f"正面新聞應高分，got {score}"
+
+
+def test_news_negative_keywords():
+    """負面關鍵字新聞應得低分"""
+    news_list = [{"title": "公司發生財務困難，財報虧損", "publishTime": 0}]
+    score, sig = news.score_news(news_list)
+    assert score < 50, f"負面新聞應低分，got {score}"
+
+
+def test_news_empty_returns_neutral():
+    """無新聞應回傳 50（中性）且無訊號"""
+    score, sig = news.score_news([])
+    assert score == 50.0
+    assert sig == ""
+
+
+def test_news_neutral_no_signal():
+    """無關鍵字新聞應為中性，不顯示訊號"""
+    news_list = [{"title": "公司召開股東常會", "publishTime": 0}]
+    score, sig = news.score_news(news_list)
+    assert sig == "", f"無關鍵字不應顯示訊號，got '{sig}'"
+
+
+def test_news_run_output_format():
+    """run() 應輸出含必要欄位的 DataFrame"""
+    news_data = {
+        "2330": [{"title": "取得重大合約", "publishTime": 0}],
+        "2317": [],
+    }
+    result = news.run(news_data, ["2330", "2317"])
+    assert "stock_id"    in result.columns
+    assert "news_score"  in result.columns
+    assert "news_signal" in result.columns
+    assert len(result) == 2
+
+
+def test_hybrid_new_columns_present():
+    """hybrid.run() 結果應含新增欄位"""
+    price_data = {"2330": make_price_df(120, "up")}
+    fund_data  = {"2330": {"financial": pd.DataFrame(),
+                           "dividend":  pd.DataFrame(),
+                           "revenue":   pd.DataFrame()}}
+    result = hybrid.run(price_data, fund_data, pd.DataFrame(),
+                        macro_context="🌐 VIX 18.5 低波動")
+    assert "macro_context"  in result.columns
+    assert "margin_score"   in result.columns
+    assert "insider_signal" in result.columns
+    assert result.iloc[0]["macro_context"] == "🌐 VIX 18.5 低波動"
 
 
 # ─── 執行 ─────────────────────────────────────────────────────────────────────
@@ -296,6 +426,19 @@ if __name__ == "__main__":
         test_hybrid_tier_labels,
         test_hybrid_ablation_tech_only,
         test_hybrid_old_strategies_unaffected,
+        # 新模組
+        test_margin_score_range,
+        test_margin_low_short_ratio_bullish,
+        test_margin_high_short_ratio_bearish,
+        test_margin_empty_returns_neutral,
+        test_margin_run_output_format,
+        test_margin_integrated_into_chip,
+        test_news_positive_keywords,
+        test_news_negative_keywords,
+        test_news_empty_returns_neutral,
+        test_news_neutral_no_signal,
+        test_news_run_output_format,
+        test_hybrid_new_columns_present,
     ]
     passed = 0
     for t in tests:

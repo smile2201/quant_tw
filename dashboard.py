@@ -160,6 +160,12 @@ if page == "🏠 今日選股":
         strong = df[df["tier"] == "強力候選"]
         watch  = df[df["tier"] == "觀察股"]
 
+        # 總體經濟標頭
+        if "macro_context" in df.columns:
+            ctx = str(df["macro_context"].iloc[0])
+            if ctx and ctx != "nan":
+                st.info(ctx)
+
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("日期", sel)
         c2.metric("強力候選", f"{len(strong)} 檔")
@@ -167,15 +173,21 @@ if page == "🏠 今日選股":
         c4.metric("評估總數", f"{len(df)} 檔")
         st.markdown("---")
 
+        SCORE_COLS   = ["stock_id", "final_score", "tech_score", "fund_score",
+                        "event_score", "chip_score"]
+        SIGNAL_COLS  = ["tech_signals", "chip_signals", "insider_signal", "news_signal"]
+
         if len(strong) > 0:
             st.subheader("💎 強力候選")
-            cols = [c for c in ["stock_id","final_score","tech_score","fund_score","event_score","tech_signals"] if c in df.columns]
-            st.dataframe(strong[cols].reset_index(drop=True), hide_index=True, use_container_width=True)
+            show_cols = [c for c in SCORE_COLS + SIGNAL_COLS if c in df.columns]
+            st.dataframe(strong[show_cols].reset_index(drop=True),
+                         hide_index=True, use_container_width=True)
 
         if len(watch) > 0:
             st.subheader("👀 觀察股")
-            cols = [c for c in ["stock_id","final_score","tech_score","fund_score","tech_signals"] if c in df.columns]
-            st.dataframe(watch[cols].reset_index(drop=True), hide_index=True, use_container_width=True)
+            show_cols = [c for c in SCORE_COLS + ["tech_signals", "chip_signals"] if c in df.columns]
+            st.dataframe(watch[show_cols].reset_index(drop=True),
+                         hide_index=True, use_container_width=True)
 
         st.markdown("---")
         st.subheader("📊 分數分布")
