@@ -33,21 +33,36 @@ def build_message(result_df, date: str) -> str:
     strong = result_df[result_df["tier"] == "強力候選"]
     watch  = result_df[result_df["tier"] == "觀察股"]
 
-    lines = [
+    # 總體經濟標頭（若有）
+    macro_ctx = str(result_df["macro_context"].iloc[0]) \
+                if "macro_context" in result_df.columns else ""
+
+    lines = []
+    if macro_ctx:
+        lines.append(macro_ctx)
+
+    lines += [
         f"📈 {date[:4]}/{date[4:6]}/{date[6:]} 台股選股結果",
         f"━━━━━━━━━━━━━━",
         f"💎 強力候選（{len(strong)} 檔）",
     ]
+
     for _, row in strong.iterrows():
         lines.append(f"\n▶ {row['stock_id']}  總分 {int(row['final_score'])} 分")
         chip_s = int(row.get("chip_score", 50))
-        lines.append(f"  📊 技術{int(row['tech_score'])} 基本{int(row['fund_score'])} 事件{int(row['event_score'])} 籌碼{chip_s}")
+        lines.append(
+            f"  📊 技術{int(row['tech_score'])} 基本{int(row['fund_score'])} "
+            f"事件{int(row['event_score'])} 籌碼{chip_s}"
+        )
         if row.get("tech_signals"):
             lines.append(f"  🔔 {row['tech_signals']}")
         if row.get("chip_signals"):
             lines.append(f"  🏦 {row['chip_signals']}")
         if row.get("fund_signals") and row["fund_signals"] != "無":
             lines.append(f"  📋 {row['fund_signals']}")
+        insider_sig = row.get("insider_signal", "")
+        if insider_sig:
+            lines.append(f"  👤 {insider_sig}")
 
     lines += [
         f"\n━━━━━━━━━━━━━━",

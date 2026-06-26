@@ -27,6 +27,7 @@ DATASETS = {
     "dividend":      "TaiwanStockDividend",
     "revenue":       "TaiwanStockMonthRevenue",
     "institutional": "TaiwanStockInstitutionalInvestorsBuySell",  # 三大法人
+    "margin":        "TaiwanStockMarginPurchaseShortSale",         # 融資融券
 }
 
 

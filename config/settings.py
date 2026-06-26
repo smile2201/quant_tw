@@ -81,6 +81,21 @@ SCREENER = {
     # 籌碼面（三大法人）參數
     "chip_lookback_days":  5,     # 觀察近 N 日買賣超
     "chip_streak_min":     3,     # 連買 N 天以上才給滿分
+    # 籌碼面整合融資融券後的混合權重
+    "chip_weight_inst":    0.6,   # 三大法人佔籌碼分比重
+    "chip_weight_margin":  0.4,   # 融資融券佔籌碼分比重
+
+    # 融資融券參數
+    "margin_short_ratio_low":      0.10,  # 券資比低點（低於此 = 偏多）
+    "margin_short_ratio_high":     0.25,  # 券資比高點（高於此 = 偏空）
+    "margin_change_healthy_min":   0.05,  # 融資健康增幅下限
+    "margin_change_healthy_max":   0.20,  # 融資健康增幅上限
+    "margin_usage_low":            0.25,  # 融資使用率低（籌碼乾淨）
+    "margin_usage_high":           0.60,  # 融資使用率高（壓力大）
+
+    # 盤中突破通知參數
+    "intraday_breakout_days": 20,   # N 日高點突破
+    "intraday_volume_ratio":  2.0,  # 爆量倍數門檻
 
     # 事件驅動關鍵字
     "positive_keywords":   ["重大合約", "法說會", "獲利", "轉盈", "創新高"],

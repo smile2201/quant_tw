@@ -1,0 +1,51 @@
+name: 盤中突破通知
+
+on:
+  schedule:
+    - cron: '30 1 * * 1-5'   # 台灣時間 09:30
+    - cron: '30 2 * * 1-5'   # 台灣時間 10:30
+    - cron: '30 3 * * 1-5'   # 台灣時間 11:30
+    - cron: '30 4 * * 1-5'   # 台灣時間 12:30
+    - cron: '15 5 * * 1-5'   # 台灣時間 13:15
+  workflow_dispatch:
+
+jobs:
+  intraday:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 確認在交易時段（台灣 09:00-13:30）
+        id: time_guard
+        run: |
+          TW_HOUR=$(TZ='Asia/Taipei' date +%H)
+          TW_MIN=$(TZ='Asia/Taipei' date +%M)
+          TW_TOTAL=$((TW_HOUR * 60 + TW_MIN))
+          OPEN=$((9 * 60))
+          CLOSE=$((13 * 60 + 35))
+          if [ "$TW_TOTAL" -ge "$OPEN" ] && [ "$TW_TOTAL" -le "$CLOSE" ]; then
+            echo "in_session=true" >> $GITHUB_OUTPUT
+          else
+            echo "in_session=false" >> $GITHUB_OUTPUT
+            echo "⚠️ 非交易時段，跳過"
+          fi
+
+      - name: Set up Python
+        if: steps.time_guard.outputs.in_session == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        if: steps.time_guard.outputs.in_session == 'true'
+        run: pip install pandas pyarrow requests
+
+      - name: 盤中突破偵測
+        if: steps.time_guard.outputs.in_session == 'true'
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+        run: python scripts/intraday_alert.py

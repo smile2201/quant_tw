@@ -13,6 +13,7 @@ from datetime import datetime
 from config.settings import FINMIND_PRICE_DATASET
 from data.finmind_fetcher import fetch_stock, get_tw50_stocks
 from data.twse_fetcher import fetch_material_news, load_material_news
+from data.macro_fetcher import fetch_vix, fetch_fed_rate, fetch_tw_futures_foreign, build_context
 from strategy import hybrid_screener
 from notify import line_bot
 
@@ -55,8 +56,29 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
             inst_data[sid] = df
     print(f"   有籌碼資料：{len(inst_data)} 檔")
 
-    print("\n[4/4] 混合評分...")
-    result = hybrid_screener.run(price_data, fund_data, news_df, inst_data=inst_data)
+    print("\n[4/5] 載入融資融券資料...")
+    margin_data = {}
+    for sid in stock_ids:
+        df = fetch_stock(sid, "margin")
+        if not df.empty:
+            margin_data[sid] = df
+    print(f"   有融資融券資料：{len(margin_data)} 檔")
+
+    print("\n[5/5] 總體經濟指標...")
+    vix_data     = fetch_vix()
+    fed_data     = fetch_fed_rate()
+    futures_data = fetch_tw_futures_foreign()
+    macro_ctx    = build_context(vix_data, fed_data, futures_data)
+    if macro_ctx:
+        print(f"   {macro_ctx}")
+
+    print("\n[評分] 混合評分...")
+    result = hybrid_screener.run(
+        price_data, fund_data, news_df,
+        inst_data=inst_data,
+        margin_data=margin_data,
+        macro_context=macro_ctx,
+    )
 
     out_path = RESULTS_DIR_PATH / f"{today}_screener.csv"
     result.to_csv(out_path, index=False, encoding="utf-8-sig")

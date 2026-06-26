@@ -9,18 +9,22 @@ from strategy import technical_strategy as tech
 from strategy import fundamental_strategy as fund
 from strategy import event_strategy as event
 from strategy import chip_strategy as chip
+from strategy import margin_strategy as margin
 
 
 def run(
-    price_data:  dict,
-    fund_data:   dict,
-    news_df:     pd.DataFrame,
-    inst_data:   dict         = None,
-    use_tech:    bool         = True,
-    use_fund:    bool         = True,
-    use_event:   bool         = True,
-    use_chip:    bool         = True,
-    cutoff_date: str          = None,
+    price_data:   dict,
+    fund_data:    dict,
+    news_df:      pd.DataFrame,
+    inst_data:    dict         = None,
+    margin_data:  dict         = None,
+    insider_data: dict         = None,
+    macro_context: str         = "",
+    use_tech:     bool         = True,
+    use_fund:     bool         = True,
+    use_event:    bool         = True,
+    use_chip:     bool         = True,
+    cutoff_date:  str          = None,
 ) -> pd.DataFrame:
     """
     混合評分主函式
@@ -29,17 +33,21 @@ def run(
         price_data:  {stock_id: price_adj_df}（技術面用）
         fund_data:   {stock_id: {"financial":df, "dividend":df, "revenue":df}}
         news_df:     TWSE 重大訊息 DataFrame
-        inst_data:   {stock_id: 三大法人 DataFrame}（籌碼面用，可為 None）
-        use_tech:    是否啟用技術面（ablation 用）
-        use_fund:    是否啟用基本面
-        use_event:   是否啟用事件驅動
-        use_chip:    是否啟用籌碼面
-        cutoff_date: 若指定，只用 <= 此日期的資料；事件/籌碼改用中性分（動態回測用）
+        inst_data:    {stock_id: 三大法人 DataFrame}（籌碼面用，可為 None）
+        margin_data:  {stock_id: 融資融券 DataFrame}（可為 None）
+        insider_data: {stock_id: 內部人申報 DataFrame}（可為 None，失敗給中性分）
+        macro_context: 總體經濟摘要字串（透傳給通知，不影響分數）
+        use_tech:     是否啟用技術面（ablation 用）
+        use_fund:     是否啟用基本面
+        use_event:    是否啟用事件驅動
+        use_chip:     是否啟用籌碼面
+        cutoff_date:  若指定，只用 <= 此日期的資料；事件/籌碼改用中性分（動態回測用）
 
     Returns:
         DataFrame，columns: [stock_id, final_score, tech_score, fund_score,
                              event_score, chip_score, tier,
-                             tech_signals, fund_signals, events, chip_signals]
+                             tech_signals, fund_signals, events, chip_signals,
+                             insider_signal, macro_context]
         tier: "強力候選" | "觀察股" | "普通"
     """
     stock_ids = list(price_data.keys())
@@ -76,6 +84,37 @@ def run(
         "tech_signals": "", "fund_signals": "",
         "events": "", "chip_signals": "",
     })
+
+    # ── 融資融券：混入 chip_score ───────────────────────────────────────────────
+    if use_chip and margin_data and not cutoff_date:
+        margin_df = margin.run(margin_data, stock_ids)
+        result = result.merge(margin_df, on="stock_id", how="left")
+        result["margin_score"]   = result["margin_score"].fillna(50.0)
+        result["margin_signals"] = result["margin_signals"].fillna("")
+        wi = SCREENER["chip_weight_inst"]
+        wm = SCREENER["chip_weight_margin"]
+        result["chip_score"] = (
+            result["chip_score"] * wi + result["margin_score"] * wm
+        ).round(1)
+        result["chip_signals"] = result.apply(
+            lambda r: " | ".join(filter(None, [r["chip_signals"], r["margin_signals"]])),
+            axis=1,
+        )
+    else:
+        result["margin_score"]   = 50.0
+        result["margin_signals"] = ""
+
+    # ── 內部人申報：輔助訊號（不影響評分，僅附在通知中）──────────────────────
+    if insider_data is not None and not cutoff_date:
+        from strategy import insider_strategy as insider
+        insider_df = insider.run(stock_ids, insider_data)
+        result = result.merge(insider_df[["stock_id", "insider_signal"]], on="stock_id", how="left")
+        result["insider_signal"] = result["insider_signal"].fillna("")
+    else:
+        result["insider_signal"] = ""
+
+    # ── 總體經濟摘要透傳（欄位供通知函式使用）──────────────────────────────
+    result["macro_context"] = macro_context
 
     # ── 動態權重（停用模組時重新分配）──────────────────────────────────────────
     w_tech  = SCREENER["weight_technical"]   if use_tech  else 0
