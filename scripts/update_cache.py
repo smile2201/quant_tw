@@ -16,7 +16,12 @@ if __name__ == "__main__":
     fetch_material_news()
     fetch_company_info()
 
-    print(f"\n=== 更新 FinMind cache（台灣50 / {FINMIND_PRICE_DATASET}）===")
     stocks = get_tw50_stocks()
+
+    print(f"\n=== 更新股價 cache（{FINMIND_PRICE_DATASET}）===")
     fetch_multiple(stocks, dataset=FINMIND_PRICE_DATASET)
+
+    print("\n=== 更新融資融券 cache ===")
+    fetch_multiple(stocks, dataset="margin")
+
     print("\n完成")

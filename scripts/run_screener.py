@@ -14,7 +14,8 @@ from config.settings import FINMIND_PRICE_DATASET
 from data.finmind_fetcher import fetch_stock, get_tw50_stocks
 from data.twse_fetcher import fetch_material_news, load_material_news
 from data.macro_fetcher import fetch_vix, fetch_fed_rate, fetch_tw_futures_foreign, build_context
-from strategy import hybrid_screener
+from data.news_fetcher import fetch_batch as fetch_news_batch
+from strategy import hybrid_screener, news_strategy
 from notify import line_bot
 
 RESULTS_DIR_PATH = Path(os.path.dirname(os.path.dirname(__file__))) / "results"
@@ -28,10 +29,10 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     print(f"=== 選股評分 {today} ===")
     print(f"股票池：{len(stock_ids)} 檔，資料集：{FINMIND_PRICE_DATASET}")
 
-    print("\n[1/4] TWSE 重大訊息...")
+    print("\n[1/6] TWSE 重大訊息...")
     news_df = load_material_news() if use_cached_news else fetch_material_news()
 
-    print("\n[2/4] 載入價格 & 基本面資料...")
+    print("\n[2/6] 載入價格 & 基本面資料...")
     price_data = {}
     fund_data  = {}
 
@@ -48,7 +49,7 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
 
     print(f"   有價格資料：{len(price_data)} 檔")
 
-    print("\n[3/4] 載入三大法人籌碼資料...")
+    print("\n[3/6] 載入三大法人籌碼資料...")
     inst_data = {}
     for sid in stock_ids:
         df = fetch_stock(sid, "institutional")
@@ -56,7 +57,7 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
             inst_data[sid] = df
     print(f"   有籌碼資料：{len(inst_data)} 檔")
 
-    print("\n[4/5] 載入融資融券資料...")
+    print("\n[4/6] 載入融資融券資料...")
     margin_data = {}
     for sid in stock_ids:
         df = fetch_stock(sid, "margin")
@@ -64,7 +65,7 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
             margin_data[sid] = df
     print(f"   有融資融券資料：{len(margin_data)} 檔")
 
-    print("\n[5/5] 總體經濟指標...")
+    print("\n[5/6] 總體經濟指標...")
     vix_data     = fetch_vix()
     fed_data     = fetch_fed_rate()
     futures_data = fetch_tw_futures_foreign()
@@ -79,6 +80,15 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
         margin_data=margin_data,
         macro_context=macro_ctx,
     )
+
+    print("\n[6/6] 新聞情緒（強力候選 + 觀察股）...")
+    top_ids  = result[result["tier"].isin(["強力候選", "觀察股"])]["stock_id"].tolist()
+    news_raw = fetch_news_batch(top_ids)
+    news_df2 = news_strategy.run(news_raw, top_ids)
+    result   = result.merge(news_df2[["stock_id", "news_signal"]], on="stock_id", how="left")
+    result["news_signal"] = result["news_signal"].fillna("")
+    hit = result[result["news_signal"] != ""]
+    print(f"   有情緒訊號：{len(hit)} 檔")
 
     out_path = RESULTS_DIR_PATH / f"{today}_screener.csv"
     result.to_csv(out_path, index=False, encoding="utf-8-sig")

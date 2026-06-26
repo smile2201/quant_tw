@@ -63,6 +63,9 @@ def build_message(result_df, date: str) -> str:
         insider_sig = row.get("insider_signal", "")
         if insider_sig:
             lines.append(f"  👤 {insider_sig}")
+        news_sig = row.get("news_signal", "")
+        if news_sig:
+            lines.append(f"  {news_sig}")
 
     lines += [
         f"\n━━━━━━━━━━━━━━",
