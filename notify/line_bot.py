@@ -40,9 +40,12 @@ def build_message(result_df, date: str) -> str:
     ]
     for _, row in strong.iterrows():
         lines.append(f"\n▶ {row['stock_id']}  總分 {int(row['final_score'])} 分")
-        lines.append(f"  📊 技術 {int(row['tech_score'])} | 基本 {int(row['fund_score'])} | 事件 {int(row['event_score'])}")
+        chip_s = int(row.get("chip_score", 50))
+        lines.append(f"  📊 技術{int(row['tech_score'])} 基本{int(row['fund_score'])} 事件{int(row['event_score'])} 籌碼{chip_s}")
         if row.get("tech_signals"):
             lines.append(f"  🔔 {row['tech_signals']}")
+        if row.get("chip_signals"):
+            lines.append(f"  🏦 {row['chip_signals']}")
         if row.get("fund_signals") and row["fund_signals"] != "無":
             lines.append(f"  📋 {row['fund_signals']}")
 

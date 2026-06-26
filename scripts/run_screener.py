@@ -27,15 +27,15 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     print(f"=== 選股評分 {today} ===")
     print(f"股票池：{len(stock_ids)} 檔，資料集：{FINMIND_PRICE_DATASET}")
 
-    print("\n[1/3] TWSE 重大訊息...")
+    print("\n[1/4] TWSE 重大訊息...")
     news_df = load_material_news() if use_cached_news else fetch_material_news()
 
-    print("\n[2/3] 載入價格資料...")
+    print("\n[2/4] 載入價格 & 基本面資料...")
     price_data = {}
     fund_data  = {}
 
     for sid in stock_ids:
-        price_df = fetch_stock(sid, FINMIND_PRICE_DATASET)  # 自動讀設定
+        price_df = fetch_stock(sid, FINMIND_PRICE_DATASET)
         if not price_df.empty:
             price_data[sid] = price_df
 
@@ -47,8 +47,16 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
 
     print(f"   有價格資料：{len(price_data)} 檔")
 
-    print("\n[3/3] 混合評分...")
-    result = hybrid_screener.run(price_data, fund_data, news_df)
+    print("\n[3/4] 載入三大法人籌碼資料...")
+    inst_data = {}
+    for sid in stock_ids:
+        df = fetch_stock(sid, "institutional")
+        if not df.empty:
+            inst_data[sid] = df
+    print(f"   有籌碼資料：{len(inst_data)} 檔")
+
+    print("\n[4/4] 混合評分...")
+    result = hybrid_screener.run(price_data, fund_data, news_df, inst_data=inst_data)
 
     out_path = RESULTS_DIR_PATH / f"{today}_screener.csv"
     result.to_csv(out_path, index=False, encoding="utf-8-sig")

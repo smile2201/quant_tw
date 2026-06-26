@@ -46,10 +46,11 @@ CACHE_YEARS     = 3            # 一次抓幾年資料存 cache
 
 # ─── SCREENER 參數 ────────────────────────────────────────────────────────────
 SCREENER = {
-    # 混合評分權重（三者加總 = 1.0）
-    "weight_technical":    0.40,
-    "weight_fundamental":  0.40,
-    "weight_event":        0.20,
+    # 混合評分權重（四者加總 = 1.0）
+    "weight_technical":    0.35,
+    "weight_fundamental":  0.30,
+    "weight_event":        0.15,
+    "weight_chip":         0.20,  # 籌碼面（三大法人）
 
     # 評分門檻（免費方案：financial 拿不到，分數普遍偏低，用 40/55）
     # 升級付費後改回 60/75
@@ -63,12 +64,23 @@ SCREENER = {
     "breakout_days":       20,    # N日高點突破
     "rsi_oversold":        30,
     "rsi_overbought":      70,
+    # KD 指標（隨機震盪指標）
+    "kd_period":           9,     # KD 計算天期
+    "kd_oversold":         20,    # K < 20 視為超賣
+    "kd_overbought":       80,    # K > 80 視為超買
+    # 布林通道
+    "bb_period":           20,    # 布林通道天期
+    "bb_std":              2.0,   # 標準差倍數
 
     # 基本面篩選門檻
     "eps_growth_min":      0.15,  # EPS 年增率 > 15%
     "dividend_yield_min":  0.04,  # 殖利率 > 4%
     "revenue_growth_min":  0.10,  # 月營收年增率 > 10%
     "pe_max":              15,    # 本益比上限
+
+    # 籌碼面（三大法人）參數
+    "chip_lookback_days":  5,     # 觀察近 N 日買賣超
+    "chip_streak_min":     3,     # 連買 N 天以上才給滿分
 
     # 事件驅動關鍵字
     "positive_keywords":   ["重大合約", "法說會", "獲利", "轉盈", "創新高"],

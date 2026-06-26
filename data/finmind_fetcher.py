@@ -21,11 +21,12 @@ from config.settings import (
 # ─── 常數 ─────────────────────────────────────────────────────────────────────
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 DATASETS = {
-    "price":     "TaiwanStockPrice",
-    "price_adj": "TaiwanStockPriceAdj",   # 還原股價
-    "financial": "TaiwanStockFinancialRatio",
-    "dividend":  "TaiwanStockDividend",
-    "revenue":   "TaiwanStockMonthRevenue",
+    "price":         "TaiwanStockPrice",
+    "price_adj":     "TaiwanStockPriceAdj",   # 還原股價
+    "financial":     "TaiwanStockFinancialRatio",
+    "dividend":      "TaiwanStockDividend",
+    "revenue":       "TaiwanStockMonthRevenue",
+    "institutional": "TaiwanStockInstitutionalInvestorsBuySell",  # 三大法人
 }
 
 

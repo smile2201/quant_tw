@@ -55,6 +55,31 @@ def add_volume_ratio(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     return df
 
 
+def add_kd(df: pd.DataFrame, period: int = None) -> pd.DataFrame:
+    """加入 KD 隨機震盪指標"""
+    n  = period or SCREENER["kd_period"]
+    df = df.copy()
+    low_n  = df["low"].rolling(n).min()
+    high_n = df["high"].rolling(n).max()
+    rsv    = (df["close"] - low_n) / (high_n - low_n).replace(0, np.nan) * 100
+    df["kd_k"] = rsv.ewm(com=2, adjust=False).mean()   # K線（alpha=1/3）
+    df["kd_d"] = df["kd_k"].ewm(com=2, adjust=False).mean()  # D線
+    return df
+
+
+def add_bollinger(df: pd.DataFrame, period: int = None, std: float = None) -> pd.DataFrame:
+    """加入布林通道（中軌、上軌、下軌）"""
+    n   = period or SCREENER["bb_period"]
+    std = std    or SCREENER["bb_std"]
+    df  = df.copy()
+    df["bb_mid"]   = df["close"].rolling(n).mean()
+    df["bb_std"]   = df["close"].rolling(n).std()
+    df["bb_upper"] = df["bb_mid"] + std * df["bb_std"]
+    df["bb_lower"] = df["bb_mid"] - std * df["bb_std"]
+    df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_mid"]
+    return df
+
+
 def add_amplitude(df: pd.DataFrame) -> pd.DataFrame:
     """加入振幅欄位（(high-low)/close）"""
     df = df.copy()
@@ -76,12 +101,14 @@ def score_stock(df: pd.DataFrame) -> float:
     計算單一股票的技術面評分（0~100）
 
     評分邏輯：
-    - MA 黃金交叉    +20
+    - MA 黃金交叉    +20 / 多頭排列 +10
     - 站上 MA60      +10
-    - MACD 柱狀 > 0  +20
+    - MACD 柱狀 > 0  +20 / 柱狀轉正中 +8
     - RSI 30~70 健康  +15（過熱/超賣各扣10）
-    - 突破N日高點     +20
-    - 量比 > 1.5      +15
+    - 突破N日高點     +20（放量）/ +10（縮量）
+    - 量比 > 1.5      +8
+    - KD 超賣黃金交叉 +15 / KD 多頭 +8
+    - 布林通道突破中軌 +10 / 站上中軌 +5
     """
     if df.empty or len(df) < 60:
         return 0.0
@@ -94,6 +121,8 @@ def score_stock(df: pd.DataFrame) -> float:
     df = add_rsi(df)
     df = add_volume_ratio(df)
     df = add_breakout(df)
+    df = add_kd(df)
+    df = add_bollinger(df)
 
     last = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else last
@@ -149,6 +178,32 @@ def score_stock(df: pd.DataFrame) -> float:
             and not last.get("breakout", False):
         score += 8
 
+    # KD 隨機震盪指標
+    k_now  = last.get("kd_k", np.nan)
+    d_now  = last.get("kd_d", np.nan)
+    k_prev = prev.get("kd_k", np.nan)
+    d_prev = prev.get("kd_d", np.nan)
+    if not any(pd.isna([k_now, d_now, k_prev, d_prev])):
+        kd_cross_up = k_now > d_now and k_prev <= d_prev  # 黃金交叉
+        if kd_cross_up and k_now < SCREENER["kd_oversold"]:
+            score += 15   # 超賣區黃金交叉（最強買點）
+        elif kd_cross_up:
+            score += 8    # 一般黃金交叉
+        elif k_now > d_now and k_now < SCREENER["kd_overbought"]:
+            score += 4    # KD 多頭但未交叉
+
+    # 布林通道（Bollinger Bands）
+    bb_mid  = last.get("bb_mid",  np.nan)
+    close   = last.get("close",   np.nan)
+    prev_close = prev.get("close", np.nan)
+    prev_mid   = prev.get("bb_mid", np.nan)
+    if not any(pd.isna([bb_mid, close, prev_close, prev_mid])):
+        crossed_mid = close > bb_mid and prev_close <= prev_mid  # 突破中軌
+        if crossed_mid:
+            score += 10   # 空翻多，主升段開始
+        elif close > bb_mid:
+            score += 5    # 站上中軌，持續多頭
+
     return float(max(0.0, min(100.0, score)))
 
 
@@ -191,8 +246,9 @@ def run(price_data: dict, cutoff_date: str = None) -> pd.DataFrame:
         # 收集主要訊號描述
         signals = []
         if len(df) >= 2:
-            df2 = add_ma(add_macd(add_rsi(add_volume_ratio(add_breakout(df)))))
+            df2 = add_bollinger(add_kd(add_ma(add_macd(add_rsi(add_volume_ratio(add_breakout(df)))))))
             last = df2.iloc[-1]
+            prev2 = df2.iloc[-2]
             short, long = SCREENER["ma_short"], SCREENER["ma_long"]
             if last.get(f"ma{short}", 0) > last.get(f"ma{long}", 0):
                 signals.append("MA多頭")
@@ -203,6 +259,20 @@ def run(price_data: dict, cutoff_date: str = None) -> pd.DataFrame:
             rsi = last.get("rsi", 50)
             if not pd.isna(rsi):
                 signals.append(f"RSI={rsi:.0f}")
+            # KD 訊號
+            k_now, d_now   = last.get("kd_k", np.nan), last.get("kd_d", np.nan)
+            k_prev, d_prev = prev2.get("kd_k", np.nan), prev2.get("kd_d", np.nan)
+            if not any(pd.isna([k_now, d_now, k_prev, d_prev])):
+                if k_now > d_now and k_prev <= d_prev and k_now < SCREENER["kd_oversold"]:
+                    signals.append("KD超賣黃金交叉")
+                elif k_now > d_now and k_prev <= d_prev:
+                    signals.append("KD黃金交叉")
+            # 布林通道訊號
+            bb_mid = last.get("bb_mid", np.nan)
+            close  = last.get("close",  np.nan)
+            if not any(pd.isna([bb_mid, close])):
+                if close > bb_mid and prev2.get("close", 0) <= prev2.get("bb_mid", 0):
+                    signals.append("突破布林中軌")
 
         records.append({
             "stock_id":   sid,
