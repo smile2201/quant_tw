@@ -69,8 +69,12 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     print(f"觀察股  （{len(watch)} 檔）：{', '.join(watch['stock_id'].tolist())}")
     print(f"{'='*50}")
 
-    msg = line_bot.build_message(result, today)
-    line_bot.send(msg)
+    if os.environ.get("SEND_LINE", "true").lower() != "false":
+        msg = line_bot.build_message(result, today)
+        if line_bot.send(msg):
+            (RESULTS_DIR_PATH / f"{today}_notified.flag").touch()
+    else:
+        print("[LINE] SEND_LINE=false，靜音模式，稍後由早晨補發流程通知")
 
     return result
 

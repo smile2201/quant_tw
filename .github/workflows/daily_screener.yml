@@ -16,6 +16,19 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: 時間守衛（只控制 LINE 通知，分析永遠執行）
+        id: time_guard
+        run: |
+          TW_HOUR=$(TZ='Asia/Taipei' date +%H)
+          TW_TIME=$(TZ='Asia/Taipei' date '+%H:%M')
+          echo "台灣時間：$TW_TIME"
+          if [ "$TW_HOUR" -ge 8 ] && [ "$TW_HOUR" -lt 22 ]; then
+            echo "send_line=true" >> $GITHUB_OUTPUT
+          else
+            echo "send_line=false" >> $GITHUB_OUTPUT
+            echo "⚠️ 台灣時間 $TW_TIME 在靜音時段（22:00-08:00），分析正常執行，LINE 通知由早晨補發流程處理"
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -30,6 +43,7 @@ jobs:
           FINMIND_TOKEN:      ${{ secrets.FINMIND_TOKEN }}
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          SEND_LINE:          ${{ steps.time_guard.outputs.send_line }}
         run: python scripts/run_screener.py
 
       - name: Commit results
@@ -37,5 +51,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f results/
-          git diff --cached --quiet || git commit -m "auto: $(date +'%Y-%m-%d') 選股結果"
+          git diff --cached --quiet || git commit -m "auto: $(TZ='Asia/Taipei' date +'%Y-%m-%d') 選股結果"
           git push

@@ -1,0 +1,76 @@
+name: 早晨選股補發通知
+
+on:
+  schedule:
+    - cron: '50 0 * * 2-6'  # 台灣時間 08:50，週二到週六（補發前一交易日或當天）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  morning-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 檢查是否有未通知的選股結果
+        id: check
+        run: |
+          TW_TODAY=$(TZ='Asia/Taipei' date +%Y%m%d)
+          TW_YESTERDAY=$(TZ='Asia/Taipei' date -d 'yesterday' +%Y%m%d)
+
+          UNNOTIFIED=""
+          for d in $TW_TODAY $TW_YESTERDAY; do
+            CSV="results/${d}_screener.csv"
+            FLAG="results/${d}_notified.flag"
+            if [ -f "$CSV" ] && [ ! -f "$FLAG" ]; then
+              UNNOTIFIED="$d"
+              echo "找到未通知的結果：$d"
+              break
+            fi
+          done
+
+          echo "date=$UNNOTIFIED" >> $GITHUB_OUTPUT
+          if [ -z "$UNNOTIFIED" ]; then
+            echo "✅ 近兩日皆已通知，無需補發"
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.date != ''
+        run: pip install pandas requests
+
+      - name: 補發 LINE 通知
+        if: steps.check.outputs.date != ''
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          NOTIFY_DATE:        ${{ steps.check.outputs.date }}
+        run: |
+          python - << 'PYEOF'
+          import pandas as pd, os, sys
+          sys.path.insert(0, '.')
+          from notify import line_bot
+          from pathlib import Path
+
+          date = os.environ['NOTIFY_DATE']
+          df   = pd.read_csv(f"results/{date}_screener.csv")
+          msg  = "⏰ 補發（GitHub 延遲）\n" + line_bot.build_message(df, date)
+
+          if line_bot.send(msg):
+              Path(f"results/{date}_notified.flag").touch()
+              print(f"補發成功：{date}")
+          else:
+              sys.exit(1)
+          PYEOF
+
+      - name: Commit flag
+        if: steps.check.outputs.date != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f results/*.flag
+          git diff --cached --quiet || git commit -m "notify: $(steps.check.outputs.date) 補發標記"
+          git push
