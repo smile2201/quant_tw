@@ -276,11 +276,12 @@ def make_margin_df(n=20, mp_today=500_000, ss_today=40_000,
     """產生模擬融資融券資料"""
     dates = pd.date_range("2024-01-01", periods=n, freq="B")
     base  = mp_today
+    # 欄位名稱與 FinMind TaiwanStockMarginPurchaseShortSale 實際回傳一致
     return pd.DataFrame({
-        "date":                [d.strftime("%Y-%m-%d") for d in dates],
-        "MarginPurchaseToday": [int(base * (1 + i * 0.01)) for i in range(n)],
-        "ShortSaleToday":      [ss_today] * n,
-        "MarginPurchaseLimit": [mp_limit] * n,
+        "date":                       [d.strftime("%Y-%m-%d") for d in dates],
+        "MarginPurchaseTodayBalance": [int(base * (1 + i * 0.01)) for i in range(n)],
+        "ShortSaleTodayBalance":      [ss_today] * n,
+        "MarginPurchaseLimit":        [mp_limit] * n,
     })
 
 

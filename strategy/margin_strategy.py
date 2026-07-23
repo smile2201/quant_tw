@@ -45,9 +45,11 @@ def score_margin(margin_df: pd.DataFrame, cutoff_date: str = None) -> tuple[floa
     if df.empty:
         return 50.0, []
 
-    mp_today_col = _col(df, ["MarginPurchaseToday",  "margin_purchase_today"])
+    mp_today_col = _col(df, ["MarginPurchaseTodayBalance", "MarginPurchaseToday",
+                             "margin_purchase_today_balance"])
     mp_limit_col = _col(df, ["MarginPurchaseLimit",  "margin_purchase_limit"])
-    ss_today_col = _col(df, ["ShortSaleToday",       "short_sale_today"])
+    ss_today_col = _col(df, ["ShortSaleTodayBalance", "ShortSaleToday",
+                             "short_sale_today_balance"])
 
     if not mp_today_col or not ss_today_col:
         return 50.0, []

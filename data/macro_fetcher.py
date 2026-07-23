@@ -37,25 +37,35 @@ def fetch_vix() -> dict:
 
 
 def fetch_fed_rate() -> dict:
-    """FRED 公開 CSV 抓聯邦基金利率（無需帳號）"""
+    """FRED 公開 CSV 抓聯邦基金利率；失敗時退回 Yahoo ^IRX（13週國庫券，近似值）"""
     try:
         url  = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(url, headers=HEADERS, timeout=30)
         rows = [r.split(",") for r in resp.text.strip().split("\n")[1:] if r.strip()]
-        if len(rows) < 3:
-            return {}
+        if len(rows) >= 3:
+            latest_rate = float(rows[-1][1])
+            prev_rate   = float(rows[-2][1])
 
-        latest_rate = float(rows[-1][1])
-        prev_rate   = float(rows[-2][1])
+            if latest_rate > prev_rate:
+                trend = "升息"
+            elif latest_rate < prev_rate:
+                trend = "降息"
+            else:
+                trend = "持平"
 
-        if latest_rate > prev_rate:
-            trend = "升息"
-        elif latest_rate < prev_rate:
-            trend = "降息"
-        else:
-            trend = "持平"
+            return {"rate": latest_rate, "trend": trend, "date": rows[-1][0]}
+    except Exception as e:
+        print(f"  [macro] FRED 失敗，改用 Yahoo ^IRX：{e}")
 
-        return {"rate": latest_rate, "trend": trend, "date": rows[-1][0]}
+    # fallback：^IRX 13週國庫券殖利率，與 Fed funds rate 高度連動
+    try:
+        url  = "https://query1.finance.yahoo.com/v8/finance/chart/%5EIRX"
+        resp = requests.get(url, headers=HEADERS, timeout=10)
+        meta = resp.json()["chart"]["result"][0]["meta"]
+        rate = meta.get("regularMarketPrice", 0)
+        prev = meta.get("chartPreviousClose", rate)
+        trend = "升" if rate > prev else ("降" if rate < prev else "持平")
+        return {"rate": round(rate, 2), "trend": f"短率{trend}", "date": ""}
     except Exception as e:
         print(f"  [macro] Fed 利率失敗：{e}")
         return {}
@@ -89,16 +99,17 @@ def fetch_tw_futures_foreign() -> dict:
             return {}
 
         df      = pd.DataFrame(data["data"])
-        foreign = df[df["name"].str.contains("外資|Foreign", na=False)]
+        inv_col = "institutional_investors" if "institutional_investors" in df.columns else "name"
+        foreign = df[df[inv_col].str.contains("外資|Foreign", na=False)]
         if foreign.empty:
             return {}
 
-        latest  = foreign.sort_values("date").iloc[-1]
-        net_col = next((c for c in df.columns if "net" in c.lower() and "volume" in c.lower()),
-                       next((c for c in df.columns if "net" in c.lower()), None))
-
-        net_oi  = int(pd.to_numeric(latest.get(net_col, 0), errors="coerce") or 0) \
-                  if net_col else 0
+        latest   = foreign.sort_values("date").iloc[-1]
+        long_oi  = pd.to_numeric(latest.get("long_open_interest_balance_volume", 0),
+                                 errors="coerce") or 0
+        short_oi = pd.to_numeric(latest.get("short_open_interest_balance_volume", 0),
+                                 errors="coerce") or 0
+        net_oi   = int(long_oi - short_oi)
 
         threshold = 5000
         if net_oi > threshold:

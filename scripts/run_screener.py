@@ -90,6 +90,16 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     hit = result[result["news_signal"] != ""]
     print(f"   有情緒訊號：{len(hit)} 檔")
 
+    # 內部人申報：只查強力候選（MOPS 爬蟲較慢，控制在少數幾檔）
+    print("\n[內部人] 強力候選申報查詢...")
+    from strategy.insider_strategy import score_insider
+    strong_ids = result[result["tier"] == "強力候選"]["stock_id"].tolist()
+    for sid in strong_ids:
+        _, sig = score_insider(str(sid))
+        if sig:
+            result.loc[result["stock_id"] == sid, "insider_signal"] = sig
+            print(f"   {sid}: {sig}")
+
     out_path = RESULTS_DIR_PATH / f"{today}_screener.csv"
     result.to_csv(out_path, index=False, encoding="utf-8-sig")
     print(f"\n結果已存：{out_path}")
