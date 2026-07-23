@@ -1,0 +1,36 @@
+name: 手動推播最新選股
+
+on:
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install pandas requests --quiet
+
+      - name: 推播最新選股結果
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+        run: |
+          python - << 'PYEOF'
+          import pandas as pd, sys, glob
+          sys.path.insert(0, '.')
+          from notify import line_bot
+
+          csvs = sorted(glob.glob('results/*_screener.csv'), reverse=True)
+          if not csvs:
+              print('無選股結果'); sys.exit(1)
+
+          date = csvs[0].split('/')[-1].split('_')[0]
+          df   = pd.read_csv(csvs[0])
+          msg  = line_bot.build_message(df, date)
+          sys.exit(0 if line_bot.send(msg) else 1)
+          PYEOF
