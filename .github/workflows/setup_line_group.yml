@@ -1,0 +1,25 @@
+name: setup-line-group
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.line-group-setup'
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 抓取群組 ID（結果推播到 LINE，log 不顯示）
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          CAPTURE_WAIT_MINUTES: '30'
+        run: |
+          pip install requests --quiet
+          python scripts/capture_line_group.py
