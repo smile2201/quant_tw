@@ -100,15 +100,19 @@ def score_stock(df: pd.DataFrame) -> float:
     """
     計算單一股票的技術面評分（0~100）
 
-    評分邏輯：
+    評分邏輯（2026-07-23 依 45 日逐訊號驗證大改，見 analyze_signals.py）：
     - MA 黃金交叉    +20 / 多頭排列 +10
     - 站上 MA60      +10
-    - MACD 柱狀 > 0  +20 / 柱狀轉正中 +8
-    - RSI 30~70 健康  +15（過熱/超賣各扣10）
-    - 突破N日高點     +20（放量）/ +10（縮量）
+    - MACD 柱狀 > 0  +20（5日+1.58% 有效）/ 柱狀轉正中 +8
+    - RSI 30~70 健康  +15（過熱/超賣各扣10；超買實測 -0.58%）
+    - 突破N日高點     +5（放量）/ 0（縮量）
+      ↓原 +20/+10。實測勝率 42%、5日僅 +0.11%；學術文獻一致指出
+       台股無動能效應（贏家不續強、反轉強），追高訊號降權
     - 量比 > 1.5      +8
-    - KD 超賣黃金交叉 +15 / KD 多頭 +8
-    - 布林通道突破中軌 +10 / 站上中軌 +5
+    - KD 超賣黃金交叉 +15（反轉訊號，文獻支持；樣本仍少續觀察）
+    - KD 一般黃金交叉  0（原 +8。實測 75 筆勝率 26%、5日 -3.23%，砍掉）
+    - KD 多頭未交叉   +4
+    - 站上布林中軌    +5（突破中軌原 +10 → 0：實測 58 筆 -2.53%）
     """
     if df.empty or len(df) < 60:
         return 0.0
@@ -164,13 +168,12 @@ def score_stock(df: pd.DataFrame) -> float:
         else:
             score -= 10   # 超買，扣分
 
-    # 突破N日高點
+    # 突破N日高點（台股無動能效應，實測 42% 勝率 → 大幅降權）
     if last.get("breakout", False):
         vol_ratio = last.get("vol_ratio", 0)
         if vol_ratio >= SCREENER["volume_ratio"]:
-            score += 20   # 放量突破
-        else:
-            score += 10   # 縮量突破
+            score += 5    # 放量突破（原 +20）
+        # 縮量突破不給分（原 +10）
 
     # 量比 > 1.5（即使無突破也給分）
     vol_ratio = last.get("vol_ratio", np.nan)
@@ -186,10 +189,9 @@ def score_stock(df: pd.DataFrame) -> float:
     if not any(pd.isna([k_now, d_now, k_prev, d_prev])):
         kd_cross_up = k_now > d_now and k_prev <= d_prev  # 黃金交叉
         if kd_cross_up and k_now < SCREENER["kd_oversold"]:
-            score += 15   # 超賣區黃金交叉（最強買點）
-        elif kd_cross_up:
-            score += 8    # 一般黃金交叉
-        elif k_now > d_now and k_now < SCREENER["kd_overbought"]:
+            score += 15   # 超賣區黃金交叉（反轉訊號，文獻支持）
+        # 一般黃金交叉不給分（實測勝率 26%、5日 -3.23%，2026-07 砍掉）
+        elif not kd_cross_up and k_now > d_now and k_now < SCREENER["kd_overbought"]:
             score += 4    # KD 多頭但未交叉
 
     # 布林通道（Bollinger Bands）
@@ -198,10 +200,8 @@ def score_stock(df: pd.DataFrame) -> float:
     prev_close = prev.get("close", np.nan)
     prev_mid   = prev.get("bb_mid", np.nan)
     if not any(pd.isna([bb_mid, close, prev_close, prev_mid])):
-        crossed_mid = close > bb_mid and prev_close <= prev_mid  # 突破中軌
-        if crossed_mid:
-            score += 10   # 空翻多，主升段開始
-        elif close > bb_mid:
+        # 突破中軌原 +10：實測 58 筆 5日 -2.53%，2026-07 砍掉，僅留站上中軌
+        if close > bb_mid:
             score += 5    # 站上中軌，持續多頭
 
     return float(max(0.0, min(100.0, score)))

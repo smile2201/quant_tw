@@ -101,8 +101,14 @@ def score_institutional(inst_df: pd.DataFrame, stock_id: str,
             score += w_sell   # w_sell 是負值
             signals.append(f"{label}賣超")
 
-    _investor_score(INVESTOR_NAMES["外資"],  w_buy=20, w_buy_streak=10, w_sell=-20, label="外資")
-    _investor_score(INVESTOR_NAMES["投信"],  w_buy=15, w_buy_streak=5,  w_sell=-10, label="投信")
+    # 2026-07-23 依 45 日逐訊號驗證調整（analyze_signals.py）：
+    #   外資連買 5日+2.21%（勝率64%）有效，但外資單純買超 -1.30% 無效
+    #     → 買超基礎分 20→8，連買加成 10→15（持續性才是外資的訊號）
+    #   投信買超 +2.23%（勝率60%）有效，但投信連買 -1.78%（勝率38%）反而差
+    #     → 買超基礎分 15 保留，連買加成 5→-5（連買多日=追高已晚）
+    #   外資賣超 -1.83%、投信賣超 -1.00% → 扣分維持
+    _investor_score(INVESTOR_NAMES["外資"],  w_buy=8,  w_buy_streak=15, w_sell=-20, label="外資")
+    _investor_score(INVESTOR_NAMES["投信"],  w_buy=15, w_buy_streak=-5, w_sell=-10, label="投信")
     _investor_score(INVESTOR_NAMES["自營商"], w_buy=5,  w_buy_streak=0,  w_sell=-5,  label="自營")
 
     return float(max(0.0, min(100.0, score))), signals
