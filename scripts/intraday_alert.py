@@ -111,7 +111,8 @@ def run():
 
         if sigs:
             tier_icon = "💎" if row["tier"] == "強力候選" else "👀"
-            alerts.append(f"{tier_icon} {sid}  {price}\n  " + "\n  ".join(sigs))
+            alerts.append(f"{tier_icon} {line_bot.stock_label(sid)}  {price}\n  "
+                          + "\n  ".join(sigs))
 
     if not alerts:
         print(f"[{now_str}] 無觸發訊號（監控 {len(watch_df)} 檔）")
