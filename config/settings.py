@@ -47,10 +47,13 @@ CACHE_YEARS     = 3            # 一次抓幾年資料存 cache
 # ─── SCREENER 參數 ────────────────────────────────────────────────────────────
 SCREENER = {
     # 混合評分權重（四者加總 = 1.0）
-    "weight_technical":    0.35,
-    "weight_fundamental":  0.30,
+    # 2026-07-23 依 45 日成效驗證調整：chip 與報酬相關 +0.17（唯一有效），
+    # fund/event 近零 → 加重籌碼、調降基本面。樣本仍少，每月重跑
+    # verify_performance.py 檢視，勿再憑感覺調
+    "weight_technical":    0.30,
+    "weight_fundamental":  0.20,
     "weight_event":        0.15,
-    "weight_chip":         0.20,  # 籌碼面（三大法人）
+    "weight_chip":         0.35,  # 籌碼面（三大法人+融資融券）
 
     # 評分門檻（免費方案：financial 拿不到，分數普遍偏低）
     # 40 時觀察股高達 30+ 檔沒有篩選效果，2026-07 調高到 46

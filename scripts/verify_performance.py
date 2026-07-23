@@ -57,6 +57,9 @@ def forward_returns(price_df: pd.DataFrame, base_date: str) -> dict:
         j = idx + h
         if j < len(df):
             out[h] = (float(df["close"].iloc[j]) - base_close) / base_close * 100
+
+    # 抱到今天（最後一個交易日收盤）
+    out["now"] = (float(df["close"].iloc[-1]) - base_close) / base_close * 100
     return out
 
 
@@ -91,7 +94,12 @@ def run():
                 "stock_id":    sid,
                 "tier":        row["tier"],
                 "final_score": row.get("final_score"),
+                "tech_score":  row.get("tech_score"),
+                "fund_score":  row.get("fund_score"),
+                "event_score": row.get("event_score"),
+                "chip_score":  row.get("chip_score"),
                 **{f"ret_{h}d": rets[h] for h in HORIZONS},
+                "ret_now":     rets["now"],
             })
 
     if not records:
@@ -119,12 +127,49 @@ def run():
                   f"{valid.max():>+6.1f}% {valid.min():>+6.1f}%")
         print()
 
-    # 分數與報酬的相關性（分數越高報酬越好才代表評分有效）
-    valid20 = report.dropna(subset=["ret_20d", "final_score"])
-    if len(valid20) > 10:
-        corr = valid20["final_score"].corr(valid20["ret_20d"])
-        print(f"final_score 與 20日報酬相關係數：{corr:.3f}"
-              f"（> 0 代表分數越高報酬越好）")
+    # ── 抱到今天的成效（回答「推薦當天買、抱到現在」）─────────────────────
+    print("═" * 55)
+    print("📌 推薦當天買進、抱到今天的成效：")
+    for tier in TIERS:
+        valid = report[report["tier"] == tier]["ret_now"].dropna()
+        if valid.empty:
+            continue
+        win = (valid > 0).mean() * 100
+        print(f"  {tier}：{len(valid)} 筆 | 平均 {valid.mean():+.2f}% | "
+              f"賺錢比例 {win:.1f}% | 最佳 {valid.max():+.1f}% | 最差 {valid.min():+.1f}%")
+
+    # 大盤基準：同樣的進場日買 0050 抱到今天
+    try:
+        bench = _load_price("0050").sort_values("date").reset_index(drop=True)
+        if not bench.empty:
+            last_close = float(bench["close"].iloc[-1])
+            b_rets = []
+            for d in sorted(report["date"].unique()):
+                sub = bench[bench["date"].astype(str) <= d]
+                if sub.empty:
+                    continue
+                base = float(sub["close"].iloc[-1])
+                b_rets.append((last_close - base) / base * 100)
+            if b_rets:
+                print(f"  【基準】同進場日買 0050：平均 {sum(b_rets)/len(b_rets):+.2f}%"
+                      f"（贏過基準才代表選股有價值）")
+    except Exception as e:
+        print(f"  （基準 0050 取得失敗：{e}）")
+    print()
+
+    # ── 各因子與報酬的相關性（哪個訊號真的有效）──────────────────────────
+    print("各因子分數與報酬的相關係數（> 0.1 才算有點用）：")
+    factors = ["final_score", "tech_score", "fund_score", "event_score", "chip_score"]
+    print(f"  {'因子':<14} {'5日':>8} {'20日':>8} {'至今':>8}")
+    for fac in factors:
+        if fac not in report.columns:
+            continue
+        row_out = f"  {fac:<14}"
+        for col in ["ret_5d", "ret_20d", "ret_now"]:
+            valid = report.dropna(subset=[col, fac])
+            corr  = valid[fac].corr(valid[col]) if len(valid) > 10 else float("nan")
+            row_out += f" {corr:>+7.3f}"
+        print(row_out)
 
 
 if __name__ == "__main__":
