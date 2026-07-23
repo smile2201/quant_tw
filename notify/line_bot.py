@@ -105,7 +105,7 @@ def build_message(result_df, date: str) -> str:
     lines += [
         f"\n━━━━━━━━━━━━━━",
         f"👀 觀察股（{len(watch)} 檔）",
-        "  " + "、".join(watch["stock_id"].tolist()),
+        "  " + "、".join(watch["stock_id"].astype(str).tolist()),
         f"\n共評估 {len(result_df)} 檔",
         f"⚠️ 僅供參考，非投資建議",
     ]
