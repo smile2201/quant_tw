@@ -25,10 +25,41 @@ LINE_ENDPOINT_API = "https://api.line.me/v2/bot/channel/webhook/endpoint"
 LINE_PUSH_API     = "https://api.line.me/v2/bot/message/push"
 
 
-def push(to: str, text: str):
-    requests.post(LINE_PUSH_API, headers=LINE_HEADERS,
-                  json={"to": to, "messages": [{"type": "text", "text": text}]},
-                  timeout=10)
+def push(to: str, text: str, label: str = "") -> bool:
+    r = requests.post(LINE_PUSH_API, headers=LINE_HEADERS,
+                      json={"to": to, "messages": [{"type": "text", "text": text}]},
+                      timeout=10)
+    # 只 log 狀態碼與錯誤內容，不 log 收件者
+    if r.status_code == 200:
+        print(f"推播成功（{label}）")
+        return True
+    print(f"推播失敗（{label}）：{r.status_code} {r.text[:200]}")
+    return False
+
+
+def group_name(group_id: str) -> str:
+    try:
+        r = requests.get(f"https://api.line.me/v2/bot/group/{group_id}/summary",
+                         headers=LINE_HEADERS, timeout=10)
+        if r.status_code == 200:
+            return r.json().get("groupName", "")
+        print(f"查群組名稱失敗：{r.status_code}")
+    except Exception as e:
+        print(f"查群組名稱錯誤：{e}")
+    return ""
+
+
+def log_quota():
+    try:
+        r = requests.get("https://api.line.me/v2/bot/message/quota/consumption",
+                         headers=LINE_HEADERS, timeout=10)
+        r2 = requests.get("https://api.line.me/v2/bot/message/quota",
+                          headers=LINE_HEADERS, timeout=10)
+        used  = r.json().get("totalUsage", "?")
+        limit = r2.json().get("value", "?") if r2.status_code == 200 else "?"
+        print(f"本月訊息額度：已用 {used} / {limit}")
+    except Exception as e:
+        print(f"查額度失敗：{e}")
 
 
 def main():
@@ -106,18 +137,22 @@ def main():
                 push(LINE_USER_ID, "⏰ 群組設定逾時，請到 GitHub Actions 重跑 setup-line-group")
             sys.exit(2)
 
-        # 5. 推播到群組告知 ID（log 絕不輸出）
-        print("已抓到群組 ID（不顯示於 log），推播設定指示到群組...")
-        push(group_id,
-             f"✅ 群組連線成功！\n"
-             f"━━━━━━━━━━━━━━\n"
-             f"群組 ID：\n{group_id}\n"
-             f"━━━━━━━━━━━━━━\n"
-             f"最後一步：複製上面這串 C 開頭的 ID，\n"
-             f"到 GitHub repo → Settings → Secrets and variables\n"
-             f"→ Actions → New repository secret\n"
-             f"名稱：LINE_GROUP_ID\n"
-             f"設定完成後，之後所有選股通知都會推到這個群組 📈")
+        # 5. 查群組名稱 + 推播（個人聊天必推，群組也推；log 絕不輸出 ID）
+        print("已抓到群組 ID（不顯示於 log）")
+        log_quota()
+        gname = group_name(group_id)
+        print(f"群組名稱：{gname or '（取不到）'}")
+
+        id_msg = (f"✅ 已連結群組「{gname or '未知名稱'}」\n"
+                  f"━━━━━━━━━━━━━━\n"
+                  f"群組 ID：\n{group_id}\n"
+                  f"━━━━━━━━━━━━━━\n"
+                  f"請把這串 C 開頭的 ID 設定到 GitHub Secret\n"
+                  f"（名稱 LINE_GROUP_ID），或直接貼給 Claude 處理")
+
+        if LINE_USER_ID:
+            push(LINE_USER_ID, id_msg, "個人聊天")
+        push(group_id, id_msg, "群組")
 
     finally:
         # 6. 還原 webhook
