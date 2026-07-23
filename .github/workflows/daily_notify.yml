@@ -47,6 +47,8 @@ jobs:
         env:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+          LINE_ALSO_USER:     ${{ vars.LINE_ALSO_USER }}
           NOTIFY_DATE:        ${{ steps.check.outputs.date }}
         run: |
           python - << 'PYEOF'

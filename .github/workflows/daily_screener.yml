@@ -43,6 +43,8 @@ jobs:
           FINMIND_TOKEN:      ${{ secrets.FINMIND_TOKEN }}
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+          LINE_ALSO_USER:     ${{ vars.LINE_ALSO_USER }}
           SEND_LINE:          ${{ steps.time_guard.outputs.send_line }}
         run: python scripts/run_screener.py
 

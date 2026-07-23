@@ -13,7 +13,13 @@ from datetime import datetime
 from config.settings import TWSE_DATA_DIR
 
 YAHOO_NEWS_URL = "https://query2.finance.yahoo.com/v1/finance/search"
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; quant_tw/1.0)"}
+# 用完整瀏覽器 UA：自訂 UA 曾被 Yahoo 間歇性擋掉（2026-07 news 訊號歸零）
+HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/126.0.0.0 Safari/537.36"),
+    "Accept": "application/json",
+}
 NEWS_CACHE_DIR = Path(TWSE_DATA_DIR) / "news_cache"
 
 

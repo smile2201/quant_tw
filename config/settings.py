@@ -52,9 +52,10 @@ SCREENER = {
     "weight_event":        0.15,
     "weight_chip":         0.20,  # 籌碼面（三大法人）
 
-    # 評分門檻（免費方案：financial 拿不到，分數普遍偏低，用 40/55）
+    # 評分門檻（免費方案：financial 拿不到，分數普遍偏低）
+    # 40 時觀察股高達 30+ 檔沒有篩選效果，2026-07 調高到 46
     # 升級付費後改回 60/75
-    "threshold_watch":     40,    # 觀察股
+    "threshold_watch":     46,    # 觀察股
     "threshold_strong":    55,    # 強力候選
 
     # 技術面指標參數
