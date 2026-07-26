@@ -127,9 +127,44 @@ def fetch_tw_futures_foreign() -> dict:
         return {}
 
 
-def build_context(vix: dict, fed: dict, futures: dict) -> str:
+def fetch_market_regime() -> dict:
+    """
+    大盤季線濾網（台股量化標配：大盤在季線上做多勝率高，季線下宜保守）
+    用 0050 收盤 vs MA60 判斷；資料來源 FinMind（本地 cache 優先）
+    Returns: {"bull": bool, "desc": str}；失敗回傳 {}（不影響選股）
+    """
+    try:
+        from data.finmind_fetcher import fetch_stock
+        df = fetch_stock("0050", "price")
+        if df.empty or len(df) < 65:
+            return {}
+        df = df.sort_values("date")
+        close = float(df["close"].iloc[-1])
+        ma60  = float(df["close"].iloc[-60:].mean())
+        ma60_prev = float(df["close"].iloc[-65:-5].mean())
+        slope_up  = ma60 > ma60_prev
+
+        bull = close > ma60
+        if bull and slope_up:
+            desc = "📈 大盤季線上（多方）"
+        elif bull:
+            desc = "📈 大盤季線上（季線走平）"
+        elif slope_up:
+            desc = "🐻 大盤跌破季線"
+        else:
+            desc = "🐻 大盤季線下且下彎（空方，保守）"
+        return {"bull": bull, "desc": desc}
+    except Exception as e:
+        print(f"  [macro] 大盤濾網失敗：{e}")
+        return {}
+
+
+def build_context(vix: dict, fed: dict, futures: dict, regime: dict = None) -> str:
     """組合成 LINE 通知用的一行大盤摘要"""
     parts = []
+
+    if regime:
+        parts.append(regime["desc"])
 
     if futures:
         net = futures.get("net_oi", 0)

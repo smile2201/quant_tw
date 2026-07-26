@@ -6,3 +6,4 @@ finmind>=1.9
 pytest>=7.0
 streamlit>=1.30
 lxml>=4.9
+html5lib>=1.1

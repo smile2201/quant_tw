@@ -13,7 +13,8 @@ from datetime import datetime
 from config.settings import FINMIND_PRICE_DATASET
 from data.finmind_fetcher import fetch_stock, get_tw50_stocks
 from data.twse_fetcher import fetch_material_news, load_material_news
-from data.macro_fetcher import fetch_vix, fetch_fed_rate, fetch_tw_futures_foreign, build_context
+from data.macro_fetcher import (fetch_vix, fetch_fed_rate, fetch_tw_futures_foreign,
+                                fetch_market_regime, build_context)
 from data.news_fetcher import fetch_batch as fetch_news_batch
 from strategy import hybrid_screener, news_strategy
 from notify import line_bot
@@ -69,7 +70,8 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     vix_data     = fetch_vix()
     fed_data     = fetch_fed_rate()
     futures_data = fetch_tw_futures_foreign()
-    macro_ctx    = build_context(vix_data, fed_data, futures_data)
+    regime       = fetch_market_regime()
+    macro_ctx    = build_context(vix_data, fed_data, futures_data, regime)
     if macro_ctx:
         print(f"   {macro_ctx}")
 
@@ -89,6 +91,16 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     result["news_signal"] = result["news_signal"].fillna("")
     hit = result[result["news_signal"] != ""]
     print(f"   有情緒訊號：{len(hit)} 檔")
+
+    # 大盤季線濾網：空頭時強力候選門檻 +10（季線下做多勝率驟降，寧缺勿濫）
+    from config.settings import SCREENER as _SC
+    if regime and not regime["bull"]:
+        bear_th = _SC["threshold_strong"] + 10
+        demoted_bear = result[(result["tier"] == "強力候選") &
+                              (result["final_score"] < bear_th)]
+        if not demoted_bear.empty:
+            result.loc[demoted_bear.index, "tier"] = "觀察股"
+            print(f"   🐻 空頭濾網：{len(demoted_bear)} 檔未達 {bear_th} 分，降為觀察股")
 
     # 重複推薦冷卻：最近停損出場的股票，冷卻期內降級為觀察股
     # （防止下跌中的股票被反覆推薦——2026-07 智邦連推 3 次教訓）
