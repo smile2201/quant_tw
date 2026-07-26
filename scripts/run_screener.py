@@ -90,6 +90,23 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
     hit = result[result["news_signal"] != ""]
     print(f"   有情緒訊號：{len(hit)} 檔")
 
+    # 重複推薦冷卻：最近停損出場的股票，冷卻期內降級為觀察股
+    # （防止下跌中的股票被反覆推薦——2026-07 智邦連推 3 次教訓）
+    from config.settings import SCREENER, RESULTS_DIR
+    from datetime import timedelta
+    pos_path = Path(RESULTS_DIR) / "positions.csv"
+    if pos_path.exists():
+        pos = pd.read_csv(pos_path)
+        cutoff = (datetime.now() - timedelta(days=SCREENER["reentry_cooldown_days"])).strftime("%Y%m%d")
+        cooling = set(pos[(pos["status"] == "stopped") &
+                          (pos["exit_date"].astype(str) >= cutoff)]["stock_id"].astype(str))
+        demoted = result[(result["tier"] == "強力候選") &
+                         (result["stock_id"].astype(str).isin(cooling))]
+        if not demoted.empty:
+            result.loc[demoted.index, "tier"] = "觀察股"
+            for sid in demoted["stock_id"]:
+                print(f"   ❄️ {sid} 近期停損出場，冷卻中 → 降為觀察股")
+
     # 內部人申報：只查強力候選（MOPS 爬蟲較慢，控制在少數幾檔）
     print("\n[內部人] 強力候選申報查詢...")
     from strategy.insider_strategy import score_insider

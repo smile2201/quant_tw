@@ -101,6 +101,17 @@ SCREENER = {
     "intraday_breakout_days": 20,   # N 日高點突破
     "intraday_volume_ratio":  2.0,  # 爆量倍數門檻
 
+    # 虛擬持倉追蹤（position_tracker）
+    # 2026-07 實測：7 月強力候選最深虧損 -18.8%，全因無出場機制；
+    # 停損 -7% 可把五筆重傷（-13%~-19%）全部截斷
+    "position_stop_loss":    -0.07,  # 停損線
+    "position_take_profit":   0.15,  # 停利提醒線
+    "position_max_days":      20,    # 最長持有交易日（到期結算）
+
+    # 重複推薦冷卻：同檔股票停損後 N 個日曆日內不得再列強力候選
+    # （7 月 2345 智邦下跌中被連推 3 次的教訓）
+    "reentry_cooldown_days":  10,
+
     # 事件驅動關鍵字
     "positive_keywords":   ["重大合約", "法說會", "獲利", "轉盈", "創新高"],
     "negative_keywords":   ["財務困難", "裁罰", "虧損", "重大虧損", "下市"],

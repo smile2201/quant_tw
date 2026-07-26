@@ -48,6 +48,14 @@ jobs:
           SEND_LINE:          ${{ steps.time_guard.outputs.send_line }}
         run: python scripts/run_screener.py
 
+      - name: 持倉追蹤（停損/停利/到期通知）
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+          SEND_LINE:          ${{ steps.time_guard.outputs.send_line }}
+        run: python scripts/position_tracker.py
+
       - name: Commit results
         run: |
           git config user.name  "github-actions[bot]"

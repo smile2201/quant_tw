@@ -154,6 +154,8 @@ def build_message(result_df, date: str) -> str:
         f"👀 觀察股（{len(watch)} 檔）",
         "  " + "、".join(stock_label(s) for s in watch["stock_id"]),
         f"\n共評估 {len(result_df)} 檔",
+        f"🛑 出場紀律：進場後 -7% 停損、+15% 停利",
+        f"（系統每日自動追蹤，觸發會另發通知）",
         f"⚠️ 僅供參考，非投資建議",
     ]
     return "\n".join(lines)
