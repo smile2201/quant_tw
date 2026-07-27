@@ -1,0 +1,36 @@
+name: 月度健檢
+
+on:
+  schedule:
+    - cron: '30 9 1 * *'   # 每月 1 日台灣時間 17:30
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install pandas pyarrow requests --quiet
+
+      - name: 跑健檢並推播摘要
+        env:
+          FINMIND_TOKEN:      ${{ secrets.FINMIND_TOKEN }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
+          LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+        run: python scripts/monthly_review.py
+
+      - name: Commit reports
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f results/performance_report.csv results/signal_effectiveness.csv
+          git diff --cached --quiet || git commit -m "auto: $(TZ='Asia/Taipei' date +'%Y-%m') 月度健檢報告"
+          git push

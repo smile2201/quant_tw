@@ -54,6 +54,28 @@ def _last_close(stock_id: str) -> float:
     return 0.0
 
 
+def dividends_since(stock_id: str, entry_date: str, refresh: bool = True) -> float:
+    """
+    進場日之後至今的累計現金股利（除權息旺季防誤觸停損：
+    除息日股價機械性下跌不是虧損，計算報酬時把股利加回現價）
+    entry_date: YYYYMMDD
+    """
+    try:
+        from data.finmind_fetcher import fetch_stock
+        df = fetch_stock(stock_id, "dividend", force_refresh=refresh)
+        if df.empty or "CashExDividendTradingDate" not in df.columns:
+            return 0.0
+        entry_iso = f"{entry_date[:4]}-{entry_date[4:6]}-{entry_date[6:]}"
+        today_iso = datetime.now().strftime("%Y-%m-%d")
+        mask = (df["CashExDividendTradingDate"].astype(str) > entry_iso) & \
+               (df["CashExDividendTradingDate"].astype(str) <= today_iso)
+        return float(pd.to_numeric(
+            df.loc[mask, "CashEarningsDistribution"], errors="coerce").fillna(0).sum())
+    except Exception as e:
+        print(f"  [tracker] {stock_id} 股利查詢失敗：{e}")
+        return 0.0
+
+
 def load_positions() -> pd.DataFrame:
     if POSITIONS_PATH.exists():
         df = pd.read_csv(POSITIONS_PATH)
@@ -112,13 +134,20 @@ def run():
         if now <= 0 or entry <= 0:
             continue
 
-        peak = max(float(r.get("peak_price") or entry), now)
+        # 除權息調整：持有期間配發的現金股利加回現價（含息報酬），
+        # 除息缺口不會誤觸停損
+        div = dividends_since(sid, str(r["entry_date"]))
+        eff = now + div
+
+        peak = max(float(r.get("peak_price") or entry), eff)
         pos.at[i, "peak_price"] = peak
         peak_ret = (peak - entry) / entry
-        ret      = (now - entry) / entry
+        ret      = (eff - entry) / entry
         days     = int(r.get("days_held") or 0) + 1
         pos.at[i, "days_held"] = days
         label = line_bot.stock_label(sid)
+        if div > 0:
+            label += f"（+息{div:.1f}）"
 
         # 依峰值決定當前停損線（只上移不下移）
         if peak_ret >= trail_trig:
@@ -128,7 +157,7 @@ def run():
         else:
             stop_line, stage = entry * (1 + stop_pct), "固定停損（-7%）"
 
-        if now <= stop_line:
+        if eff <= stop_line:
             pos.at[i, "status"]     = "stopped"
             pos.at[i, "exit_date"]  = today
             pos.at[i, "exit_price"] = now
@@ -138,8 +167,9 @@ def run():
                           f"  觸發{stage}，建議出場")
         elif peak_ret >= trail_trig and r["status"] == "open":
             pos.at[i, "status"] = "target"   # 進入第三段，提醒一次
+            watch_px = stop_line - div       # 換回市價基準的觀察價位
             alerts.append(f"🎯 {label}\n  {ret*100:+.1f}%（峰值 {peak_ret*100:+.1f}%）\n"
-                          f"  已啟動移動停損：跌破 {stop_line:.1f} 出場，續抱讓獲利奔跑")
+                          f"  已啟動移動停損：跌破 {watch_px:.1f} 出場，續抱讓獲利奔跑")
         elif days >= max_days:
             pos.at[i, "status"]     = "expired"
             pos.at[i, "exit_date"]  = today

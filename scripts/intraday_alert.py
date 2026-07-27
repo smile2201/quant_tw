@@ -76,6 +76,9 @@ def _check_positions_intraday() -> list:
     trail_pct  = SCREENER["position_trail_pct"]
 
     from notify.line_bot import stock_label
+    sys.path.insert(0, os.path.dirname(__file__))
+    from position_tracker import dividends_since
+
     warns = []
     for _, r in pos[pos["status"].isin(["open", "target"])].iterrows():
         sid   = str(r["stock_id"])
@@ -84,7 +87,9 @@ def _check_positions_intraday() -> list:
         rt    = _get_realtime(sid)
         if not rt or not rt.get("price") or entry <= 0:
             continue
-        price    = rt["price"]
+        # 除息調整（refresh=False 讀 cache，避免盤中重複打 API）
+        div      = dividends_since(sid, str(r["entry_date"]), refresh=False)
+        price    = rt["price"] + div
         peak     = max(peak, price)
         peak_ret = (peak - entry) / entry
 
@@ -97,8 +102,8 @@ def _check_positions_intraday() -> list:
 
         if price <= stop_line:
             ret = (price - entry) / entry * 100
-            warns.append(f"🛑 {stock_label(sid)}  {price}\n"
-                         f"  盤中跌破{stage}（{stop_line:.1f}）{ret:+.1f}%，留意出場")
+            warns.append(f"🛑 {stock_label(sid)}  {rt['price']}\n"
+                         f"  盤中跌破{stage}（{stop_line - div:.1f}）{ret:+.1f}%，留意出場")
     return warns
 
 

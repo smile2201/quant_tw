@@ -46,6 +46,7 @@ jobs:
       - name: 盤中突破偵測
         if: steps.time_guard.outputs.in_session == 'true'
         env:
+          FINMIND_TOKEN:      ${{ secrets.FINMIND_TOKEN }}
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
           LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
