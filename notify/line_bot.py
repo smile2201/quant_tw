@@ -7,15 +7,23 @@ import json
 import glob
 import requests
 
-_NAME_MAP = None   # {stock_id: 公司簡稱}，載入一次後快取
+_NAME_MAP     = None   # {stock_id: 公司簡稱}，載入一次後快取
+_INDUSTRY_MAP = None   # {stock_id: 產業名稱}
+
+# TWSE 產業別代碼表（穩定，極少變動）
+INDUSTRY_CODES = {
+    "01": "水泥", "02": "食品", "03": "塑膠", "04": "紡織", "05": "電機機械",
+    "06": "電器電纜", "08": "玻璃陶瓷", "09": "造紙", "10": "鋼鐵", "11": "橡膠",
+    "12": "汽車", "14": "建材營造", "15": "航運", "16": "觀光餐旅", "17": "金融保險",
+    "18": "貿易百貨", "19": "綜合", "20": "其他", "21": "化學", "22": "生技醫療",
+    "23": "油電燃氣", "24": "半導體", "25": "電腦週邊", "26": "光電",
+    "27": "通信網路", "28": "電子零組件", "29": "電子通路", "30": "資訊服務",
+    "31": "其他電子",
+}
 
 
-def _load_name_map() -> dict:
-    """股票代號→公司簡稱。優先讀本地 TWSE json，沒有就打 TWSE API（免費）"""
-    global _NAME_MAP
-    if _NAME_MAP is not None:
-        return _NAME_MAP
-
+def _load_company_data() -> list:
+    """TWSE 公司基本資料：優先讀本地 json，沒有就打 TWSE API（免費）"""
     data = None
     local = sorted(glob.glob(os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -32,14 +40,33 @@ def _load_name_map() -> dict:
                 "https://openapi.twse.com.tw/v1/opendata/t187ap03_L", timeout=15)
             data = resp.json()
         except Exception as e:
-            print(f"[LINE] 公司名稱載入失敗（訊息只顯示代號）：{e}")
+            print(f"[LINE] 公司資料載入失敗：{e}")
             data = []
+    return data
 
-    _NAME_MAP = {
-        str(row.get("公司代號", "")).strip(): str(row.get("公司簡稱", "")).strip()
-        for row in data
-    }
+
+def _load_name_map() -> dict:
+    """股票代號→公司簡稱"""
+    global _NAME_MAP
+    if _NAME_MAP is None:
+        _NAME_MAP = {
+            str(row.get("公司代號", "")).strip(): str(row.get("公司簡稱", "")).strip()
+            for row in _load_company_data()
+        }
     return _NAME_MAP
+
+
+def _load_industry_map() -> dict:
+    """股票代號→產業名稱（用於集中度警示）"""
+    global _INDUSTRY_MAP
+    if _INDUSTRY_MAP is None:
+        _INDUSTRY_MAP = {}
+        for row in _load_company_data():
+            sid  = str(row.get("公司代號", "")).strip()
+            code = str(row.get("產業別", "")).strip().zfill(2)
+            if sid and code in INDUSTRY_CODES:
+                _INDUSTRY_MAP[sid] = INDUSTRY_CODES[code]
+    return _INDUSTRY_MAP
 
 
 def stock_label(stock_id) -> str:
@@ -149,12 +176,25 @@ def build_message(result_df, date: str) -> str:
         if news_sig:
             lines.append(f"  {news_sig}")
 
+    # 產業集中度警示（7月航運三雄同時入選的教訓：同產業齊漲齊跌）
+    if len(strong) >= 2:
+        ind_map = _load_industry_map()
+        from collections import Counter
+        inds = Counter(ind_map.get(str(s), "") for s in strong["stock_id"])
+        inds.pop("", None)
+        crowded = [(ind, n) for ind, n in inds.items() if n >= 2]
+        for ind, n in crowded:
+            lines.append(f"\n⚠️ 產業集中：{n} 檔同屬{ind}，漲跌連動高，"
+                         f"建議只擇一檔，勿全押")
+
     lines += [
         f"\n━━━━━━━━━━━━━━",
         f"👀 觀察股（{len(watch)} 檔）",
         "  " + "、".join(stock_label(s) for s in watch["stock_id"]),
         f"\n共評估 {len(result_df)} 檔",
-        f"🛑 出場紀律：進場後 -7% 停損、+15% 停利",
+        f"🛑 出場紀律：-7% 停損｜+10% 保本｜+15% 起移動停損",
+        f"💰 資金紀律：單筆風險 ≤ 總資金 2%（單檔部位 ≤ 28%），",
+        f"    同時最多 3 檔新倉、分散不同產業",
         f"（系統每日自動追蹤，觸發會另發通知）",
         f"⚠️ 僅供參考，非投資建議",
     ]

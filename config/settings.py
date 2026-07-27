@@ -101,12 +101,14 @@ SCREENER = {
     "intraday_breakout_days": 20,   # N 日高點突破
     "intraday_volume_ratio":  2.0,  # 爆量倍數門檻
 
-    # 虛擬持倉追蹤（position_tracker）
-    # 2026-07 實測：7 月強力候選最深虧損 -18.8%，全因無出場機制；
-    # 停損 -7% 可把五筆重傷（-13%~-19%）全部截斷
-    "position_stop_loss":    -0.07,  # 停損線
-    "position_take_profit":   0.15,  # 停利提醒線
-    "position_max_days":      20,    # 最長持有交易日（到期結算）
+    # 虛擬持倉追蹤（position_tracker）— 三段式出場紀律
+    # 2026-07 實測：最深虧損 -18.8% 因無出場機制；台塑化 +45% 但固定停利
+    # 只提醒一次就放生。改三段式：截斷虧損、保住成本、讓獲利奔跑
+    "position_stop_loss":         -0.07,  # 第一段：固定停損
+    "position_breakeven_trigger":  0.10,  # 第二段：峰值達 +10% → 停損上移到成本價
+    "position_trail_trigger":      0.15,  # 第三段：峰值達 +15% → 啟動移動停損
+    "position_trail_pct":          0.08,  # 移動停損 = 峰值 -8%
+    "position_max_days":           20,    # 最長持有交易日（到期結算）
 
     # 重複推薦冷卻：同檔股票停損後 N 個日曆日內不得再列強力候選
     # （7 月 2345 智邦下跌中被連推 3 次的教訓）

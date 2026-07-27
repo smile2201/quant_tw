@@ -1,14 +1,15 @@
 """
 scripts/position_tracker.py
 虛擬持倉追蹤：把每天的強力候選視為「推薦日收盤買進」的虛擬部位，
-每日盤後檢查，觸發停損/停利/到期就推播 LINE——補上系統一直缺的「出場」。
+每日盤後檢查，觸發出場條件就推播 LINE——補上系統一直缺的「出場」。
 
-規則（見 config.settings SCREENER）：
-  停損：跌破進場價 -7% → 🛑 推播，關閉部位（status=stopped）
-  停利：漲破進場價 +15% → 🎯 推播提醒（部位續留，改 status=target 不重複提醒）
-  到期：持有滿 20 個交易日 → 結算報告，關閉部位（status=expired）
+三段式出場紀律（見 config.settings SCREENER）：
+  第一段：跌破進場價 -7% → 🛑 停損出場（status=stopped）
+  第二段：峰值曾達 +10% → 停損上移到成本價（賺錢的單不許變賠錢）
+  第三段：峰值曾達 +15% → 移動停損 = 峰值 -8%（讓獲利奔跑，鎖住大部分漲幅）
+  到期：持有滿 20 個交易日 → 結算報告（status=expired）
 
-狀態檔：results/positions.csv（由 workflow commit 回 repo 保存）
+狀態檔：results/positions.csv（含 peak_price 峰值欄，由 workflow commit 保存）
 執行：python scripts/position_tracker.py（在 run_screener 之後跑）
 """
 import sys, os
@@ -28,7 +29,7 @@ HEADERS   = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) "
                             "Chrome/126.0.0.0 Safari/537.36")}
 
-COLUMNS = ["stock_id", "entry_date", "entry_price", "status",
+COLUMNS = ["stock_id", "entry_date", "entry_price", "peak_price", "status",
            "exit_date", "exit_price", "ret_pct", "days_held"]
 
 
@@ -57,6 +58,8 @@ def load_positions() -> pd.DataFrame:
     if POSITIONS_PATH.exists():
         df = pd.read_csv(POSITIONS_PATH)
         df["stock_id"] = df["stock_id"].astype(str)
+        if "peak_price" not in df.columns:   # 舊格式自動升級
+            df["peak_price"] = df["entry_price"]
         return df
     return pd.DataFrame(columns=COLUMNS)
 
@@ -84,15 +87,18 @@ def run():
                 continue
             pos = pd.concat([pos, pd.DataFrame([{
                 "stock_id": sid, "entry_date": today, "entry_price": price,
-                "status": "open", "exit_date": "", "exit_price": "",
+                "peak_price": price, "status": "open",
+                "exit_date": "", "exit_price": "",
                 "ret_pct": "", "days_held": 0,
             }])], ignore_index=True)
             print(f"  [tracker] 新部位 {sid} @ {price}")
 
-    # ── 2. 檢查所有未平倉部位 ─────────────────────────────────────────────
-    stop_pct   = SCREENER["position_stop_loss"]      # -0.07
-    target_pct = SCREENER["position_take_profit"]    # +0.15
-    max_days   = SCREENER["position_max_days"]       # 20
+    # ── 2. 檢查所有未平倉部位（三段式出場）────────────────────────────────
+    stop_pct   = SCREENER["position_stop_loss"]          # -0.07
+    be_trig    = SCREENER["position_breakeven_trigger"]  # +0.10 → 保本
+    trail_trig = SCREENER["position_trail_trigger"]      # +0.15 → 移動停損
+    trail_pct  = SCREENER["position_trail_pct"]          # 峰值 -8%
+    max_days   = SCREENER["position_max_days"]           # 20
 
     alerts = []
     for i, r in pos.iterrows():
@@ -106,22 +112,34 @@ def run():
         if now <= 0 or entry <= 0:
             continue
 
-        ret  = (now - entry) / entry
-        days = int(r.get("days_held") or 0) + 1
+        peak = max(float(r.get("peak_price") or entry), now)
+        pos.at[i, "peak_price"] = peak
+        peak_ret = (peak - entry) / entry
+        ret      = (now - entry) / entry
+        days     = int(r.get("days_held") or 0) + 1
         pos.at[i, "days_held"] = days
         label = line_bot.stock_label(sid)
 
-        if ret <= stop_pct:
+        # 依峰值決定當前停損線（只上移不下移）
+        if peak_ret >= trail_trig:
+            stop_line, stage = peak * (1 - trail_pct), f"移動停損（峰值-{trail_pct*100:.0f}%）"
+        elif peak_ret >= be_trig:
+            stop_line, stage = entry, "保本停損（成本價）"
+        else:
+            stop_line, stage = entry * (1 + stop_pct), "固定停損（-7%）"
+
+        if now <= stop_line:
             pos.at[i, "status"]     = "stopped"
             pos.at[i, "exit_date"]  = today
             pos.at[i, "exit_price"] = now
             pos.at[i, "ret_pct"]    = round(ret * 100, 2)
-            alerts.append(f"🛑 {label}\n  {ret*100:+.1f}%（{r['entry_date']} 進場 {entry}）\n"
-                          f"  跌破停損線，建議出場")
-        elif ret >= target_pct and r["status"] == "open":
-            pos.at[i, "status"] = "target"   # 只提醒一次，部位續抱
-            alerts.append(f"🎯 {label}\n  {ret*100:+.1f}%（{r['entry_date']} 進場 {entry}）\n"
-                          f"  達停利目標，可分批獲利或移動停損")
+            icon = "🛑" if ret < 0 else "💰"   # 移動停損出場多半是獲利了結
+            alerts.append(f"{icon} {label}\n  {ret*100:+.1f}%（{r['entry_date']} 進場 {entry}）\n"
+                          f"  觸發{stage}，建議出場")
+        elif peak_ret >= trail_trig and r["status"] == "open":
+            pos.at[i, "status"] = "target"   # 進入第三段，提醒一次
+            alerts.append(f"🎯 {label}\n  {ret*100:+.1f}%（峰值 {peak_ret*100:+.1f}%）\n"
+                          f"  已啟動移動停損：跌破 {stop_line:.1f} 出場，續抱讓獲利奔跑")
         elif days >= max_days:
             pos.at[i, "status"]     = "expired"
             pos.at[i, "exit_date"]  = today

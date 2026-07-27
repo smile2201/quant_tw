@@ -61,6 +61,47 @@ def _ma20(df: pd.DataFrame) -> float:
     return float(df["close"].iloc[-20:].mean())
 
 
+def _check_positions_intraday() -> list:
+    """盤中檢查持倉停損：跌破停損線即時警示（正式出場仍由盤後 tracker 判定）"""
+    pos_path = Path(RESULTS_DIR) / "positions.csv"
+    if not pos_path.exists():
+        return []
+    pos = pd.read_csv(pos_path)
+    if "peak_price" not in pos.columns:
+        pos["peak_price"] = pos["entry_price"]
+
+    stop_pct   = SCREENER["position_stop_loss"]
+    be_trig    = SCREENER["position_breakeven_trigger"]
+    trail_trig = SCREENER["position_trail_trigger"]
+    trail_pct  = SCREENER["position_trail_pct"]
+
+    from notify.line_bot import stock_label
+    warns = []
+    for _, r in pos[pos["status"].isin(["open", "target"])].iterrows():
+        sid   = str(r["stock_id"])
+        entry = float(r["entry_price"])
+        peak  = float(r.get("peak_price") or entry)
+        rt    = _get_realtime(sid)
+        if not rt or not rt.get("price") or entry <= 0:
+            continue
+        price    = rt["price"]
+        peak     = max(peak, price)
+        peak_ret = (peak - entry) / entry
+
+        if peak_ret >= trail_trig:
+            stop_line, stage = peak * (1 - trail_pct), "移動停損"
+        elif peak_ret >= be_trig:
+            stop_line, stage = entry, "保本停損"
+        else:
+            stop_line, stage = entry * (1 + stop_pct), "停損線"
+
+        if price <= stop_line:
+            ret = (price - entry) / entry * 100
+            warns.append(f"🛑 {stock_label(sid)}  {price}\n"
+                         f"  盤中跌破{stage}（{stop_line:.1f}）{ret:+.1f}%，留意出場")
+    return warns
+
+
 def run():
     results_dir = Path(RESULTS_DIR)
     csvs = sorted(results_dir.glob("*_screener.csv"), reverse=True)
@@ -113,6 +154,9 @@ def run():
             tier_icon = "💎" if row["tier"] == "強力候選" else "👀"
             alerts.append(f"{tier_icon} {line_bot.stock_label(sid)}  {price}\n  "
                           + "\n  ".join(sigs))
+
+    # 持倉停損盤中警示（優先排在最前面）
+    alerts = _check_positions_intraday() + alerts
 
     if not alerts:
         print(f"[{now_str}] 無觸發訊號（監控 {len(watch_df)} 檔）")
