@@ -140,11 +140,14 @@ def _sig(row, col) -> str:
     return "" if v.lower() in ("nan", "none", "無") else v
 
 
+WATCH_TOP_N = 10   # 觀察股只列分數前 N 檔，避免訊息變成一堵牆
+
+
 def build_message(result_df, date: str) -> str:
     strong = result_df[result_df["tier"] == "強力候選"]
     watch  = result_df[result_df["tier"] == "觀察股"]
 
-    # 總體經濟標頭（若有）
+    # 總體經濟標頭（若有；build_context 已排成多行）
     macro_ctx = str(result_df["macro_context"].iloc[0]) \
                 if "macro_context" in result_df.columns else ""
     if macro_ctx.lower() == "nan":
@@ -153,49 +156,70 @@ def build_message(result_df, date: str) -> str:
     lines = []
     if macro_ctx:
         lines.append(macro_ctx)
+        lines.append("")
 
-    lines += [
-        f"📈 {date[:4]}/{date[4:6]}/{date[6:]} 台股選股結果",
-        f"━━━━━━━━━━━━━━",
-        f"💎 強力候選（{len(strong)} 檔）",
-    ]
+    lines.append(f"📈 {date[4:6]}/{date[6:]} 選股（評估 {len(result_df)} 檔）")
+    lines.append("━━━━━━━━━━━━━━")
+
+    # ── 強力候選 ─────────────────────────────────────────────────────────
+    if strong.empty:
+        lines += [
+            "💎 今日無強力候選",
+            "（濾網收緊或分數未達標，寧缺勿濫）",
+        ]
+    else:
+        lines.append(f"💎 強力候選（{len(strong)} 檔）")
+
+    from config.settings import SCREENER as _SC
+    stop_pct = _SC.get("position_stop_loss", -0.07)
 
     for _, row in strong.iterrows():
-        lines.append(f"\n▶ {stock_label(row['stock_id'])}  總分 {int(row['final_score'])} 分")
-        chip_s = int(row.get("chip_score", 50))
+        head = f"\n▶ {stock_label(row['stock_id'])}  {int(row['final_score'])}分"
+        close = row.get("close")
+        try:
+            close = float(close)
+        except (TypeError, ValueError):
+            close = 0
+        if close > 0:
+            head += f"｜收 {close:g}"
+            lines.append(head)
+            lines.append(f"  🛑 停損參考 {close * (1 + stop_pct):.1f}")
+        else:
+            lines.append(head)
         lines.append(
-            f"  📊 技術{int(row['tech_score'])} 基本{int(row['fund_score'])} "
-            f"事件{int(row['event_score'])} 籌碼{chip_s}"
+            f"  📊 技{int(row['tech_score'])} 基{int(row['fund_score'])} "
+            f"事{int(row['event_score'])} 籌{int(row.get('chip_score', 50))}"
         )
-        for icon, col in [("🔔", "tech_signals"), ("🏦", "chip_signals"),
+        for icon, col in [("🏦", "chip_signals"), ("🔔", "tech_signals"),
                           ("📋", "fund_signals"), ("👤", "insider_signal")]:
             v = _sig(row, col)
             if v:
-                lines.append(f"  {icon} {v}")
+                lines.append(f"  {icon} {v.replace(' | ', '｜')}")
         news_sig = _sig(row, "news_signal")
         if news_sig:
             lines.append(f"  {news_sig}")
 
-    # 產業集中度警示（7月航運三雄同時入選的教訓：同產業齊漲齊跌）
+    # ── 產業集中度警示 ───────────────────────────────────────────────────
     if len(strong) >= 2:
         ind_map = _load_industry_map()
         from collections import Counter
         inds = Counter(ind_map.get(str(s), "") for s in strong["stock_id"])
         inds.pop("", None)
-        crowded = [(ind, n) for ind, n in inds.items() if n >= 2]
-        for ind, n in crowded:
-            lines.append(f"\n⚠️ 產業集中：{n} 檔同屬{ind}，漲跌連動高，"
-                         f"建議只擇一檔，勿全押")
+        for ind, n in [(i, c) for i, c in inds.items() if c >= 2]:
+            lines.append(f"\n⚠️ {n} 檔同屬{ind}，連動高，建議擇一勿全押")
 
+    # ── 觀察股：只列前 N，附分數 ─────────────────────────────────────────
+    lines.append(f"\n👀 觀察股 TOP{min(WATCH_TOP_N, len(watch))}（共 {len(watch)} 檔）")
+    for _, row in watch.head(WATCH_TOP_N).iterrows():
+        lines.append(f"  {int(row['final_score'])}分 {stock_label(row['stock_id'])}")
+    if len(watch) > WATCH_TOP_N:
+        lines.append(f"  …其餘 {len(watch) - WATCH_TOP_N} 檔略")
+
+    # ── 尾註（壓縮成三行）────────────────────────────────────────────────
     lines += [
-        f"\n━━━━━━━━━━━━━━",
-        f"👀 觀察股（{len(watch)} 檔）",
-        "  " + "、".join(stock_label(s) for s in watch["stock_id"]),
-        f"\n共評估 {len(result_df)} 檔",
-        f"🛑 出場紀律：-7% 停損｜+10% 保本｜+15% 起移動停損",
-        f"💰 資金紀律：單筆風險 ≤ 總資金 2%（單檔部位 ≤ 28%），",
-        f"    同時最多 3 檔新倉、分散不同產業",
-        f"（系統每日自動追蹤，觸發會另發通知）",
-        f"⚠️ 僅供參考，非投資建議",
+        "━━━━━━━━━━━━━━",
+        "🛑 -7%停損｜+10%保本｜+15%移動停損",
+        "💰 單筆風險≤2%｜最多3檔新倉｜分散產業",
+        "⚠️ 僅供參考，非投資建議",
     ]
     return "\n".join(lines)

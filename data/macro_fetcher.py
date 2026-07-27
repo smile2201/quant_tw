@@ -160,21 +160,18 @@ def fetch_market_regime() -> dict:
 
 
 def build_context(vix: dict, fed: dict, futures: dict, regime: dict = None) -> str:
-    """組合成 LINE 通知用的一行大盤摘要"""
+    """組合大盤摘要：濾網獨立一行（最重要），其餘指標第二行，手機不折行"""
+    line1 = regime["desc"] if regime else ""
+
     parts = []
-
-    if regime:
-        parts.append(regime["desc"])
-
     if futures:
         net = futures.get("net_oi", 0)
         sig = futures.get("signal", "")
         parts.append(f"外資期貨{net:+,}口 {sig}")
-
     if vix:
         parts.append(f"VIX {vix.get('vix','')} {vix.get('level','')}")
-
     if fed:
-        parts.append(f"Fed {fed.get('rate','')}% {fed.get('trend','')}")
+        parts.append(f"Fed {fed.get('rate','')}%{fed.get('trend','')}")
+    line2 = ("🌐 " + "｜".join(parts)) if parts else ""
 
-    return ("🌐 " + " | ".join(parts)) if parts else ""
+    return "\n".join(l for l in (line1, line2) if l)

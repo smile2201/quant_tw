@@ -83,6 +83,11 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
         macro_context=macro_ctx,
     )
 
+    # 附上收盤價（通知顯示現價與停損參考價用）
+    closes = {sid: float(df.sort_values("date")["close"].iloc[-1])
+              for sid, df in price_data.items() if not df.empty}
+    result["close"] = result["stock_id"].astype(str).map(closes)
+
     print("\n[6/6] 新聞情緒（強力候選 + 觀察股）...")
     top_ids  = result[result["tier"].isin(["強力候選", "觀察股"])]["stock_id"].tolist()
     news_raw = fetch_news_batch(top_ids)
