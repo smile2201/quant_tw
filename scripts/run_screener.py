@@ -107,6 +107,16 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
             result.loc[demoted_bear.index, "tier"] = "觀察股"
             print(f"   🐻 空頭濾網：{len(demoted_bear)} 檔未達 {bear_th} 分，降為觀察股")
 
+    # 大盤急跌斷路器：近 10 日恐慌下殺 → 今日不開新倉（強力候選全數降級）
+    crash_th = _SC.get("market_crash_10d", -0.07)
+    ret_10d  = (regime or {}).get("ret_10d")
+    if ret_10d is not None and ret_10d <= crash_th:
+        n_crash = int((result["tier"] == "強力候選").sum())
+        if n_crash:
+            result.loc[result["tier"] == "強力候選", "tier"] = "觀察股"
+            print(f"   🚨 急跌斷路器：大盤10日 {ret_10d*100:+.1f}%，"
+                  f"{n_crash} 檔強力候選降級，今日不開新倉")
+
     # 重複推薦冷卻：最近停損出場的股票，冷卻期內降級為觀察股
     # （防止下跌中的股票被反覆推薦——2026-07 智邦連推 3 次教訓）
     from config.settings import SCREENER, RESULTS_DIR

@@ -143,6 +143,25 @@ def _sig(row, col) -> str:
 WATCH_TOP_N = 10   # 觀察股只列分數前 N 檔，避免訊息變成一堵牆
 
 
+def _track_record_line() -> str:
+    """系統真實成績單（讀 positions.csv）：每則通知自帶誠實數據，防止過度信任"""
+    try:
+        import pandas as pd
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "results", "positions.csv")
+        df = pd.read_csv(path)
+        closed = df[df["status"].isin(["stopped", "expired"])].copy()
+        closed["ret_pct"] = pd.to_numeric(closed["ret_pct"], errors="coerce")
+        closed = closed.dropna(subset=["ret_pct"])
+        if len(closed) < 10:
+            return ""
+        win = (closed["ret_pct"] > 0).mean() * 100
+        return (f"📊 系統實績 {len(closed)} 筆：勝率 {win:.0f}%｜"
+                f"均 {closed['ret_pct'].mean():+.1f}%/筆（無法保證獲利）")
+    except Exception:
+        return ""
+
+
 def build_message(result_df, date: str) -> str:
     strong = result_df[result_df["tier"] == "強力候選"]
     watch  = result_df[result_df["tier"] == "觀察股"]
@@ -215,11 +234,12 @@ def build_message(result_df, date: str) -> str:
     if len(watch) > WATCH_TOP_N:
         lines.append(f"  …其餘 {len(watch) - WATCH_TOP_N} 檔略")
 
-    # ── 尾註（壓縮成三行）────────────────────────────────────────────────
-    lines += [
+    # ── 尾註（含真實成績單，別神化系統）──────────────────────────────────
+    lines += [l for l in [
         "━━━━━━━━━━━━━━",
         "🛑 -7%停損｜+10%保本｜+15%移動停損",
-        "💰 單筆風險≤2%｜最多3檔新倉｜分散產業",
-        "⚠️ 僅供參考，非投資建議",
-    ]
+        "💰 單檔≤資金10%｜單筆風險≤2%｜最多3檔新倉",
+        _track_record_line(),
+        "⚠️ 僅供參考，非投資建議；停損訊號請務必執行",
+    ] if l]
     return "\n".join(lines)

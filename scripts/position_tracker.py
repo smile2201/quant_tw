@@ -30,7 +30,8 @@ HEADERS   = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                             "Chrome/126.0.0.0 Safari/537.36")}
 
 COLUMNS = ["stock_id", "entry_date", "entry_price", "peak_price", "status",
-           "exit_date", "exit_price", "ret_pct", "days_held"]
+           "exit_date", "exit_price", "ret_pct", "days_held",
+           "last_close", "remind_left"]
 
 
 def _last_close(stock_id: str) -> float:
@@ -82,6 +83,10 @@ def load_positions() -> pd.DataFrame:
         df["stock_id"] = df["stock_id"].astype(str)
         if "peak_price" not in df.columns:   # 舊格式自動升級
             df["peak_price"] = df["entry_price"]
+        if "last_close" not in df.columns:   # 公司行動防呆用（前一日收盤）
+            df["last_close"] = ""
+        if "remind_left" not in df.columns:  # 停損連環提醒剩餘次數
+            df["remind_left"] = 0
         return df
     return pd.DataFrame(columns=COLUMNS)
 
@@ -112,6 +117,7 @@ def run():
                 "peak_price": price, "status": "open",
                 "exit_date": "", "exit_price": "",
                 "ret_pct": "", "days_held": 0,
+                "last_close": price, "remind_left": 0,
             }])], ignore_index=True)
             print(f"  [tracker] 新部位 {sid} @ {price}")
 
@@ -133,6 +139,20 @@ def run():
         now   = _last_close(sid)
         if now <= 0 or entry <= 0:
             continue
+
+        # 公司行動防呆：台股單日漲跌限 ±10%，落差 >15% 必為分割/減資/大額除權息
+        # → 按比率調整成本與峰值，不觸發停損（2026-09 緯穎 1:3 分割假虧損的教訓）
+        prev = float(r.get("last_close") or 0)
+        if prev > 0 and prev == prev and abs(now / prev - 1) > SCREENER.get("corp_action_gap", 0.15):
+            ratio = now / prev
+            pos.at[i, "entry_price"] = round(entry * ratio, 2)
+            pos.at[i, "peak_price"]  = round(float(r.get("peak_price") or entry) * ratio, 2)
+            pos.at[i, "last_close"]  = now
+            alerts.append(f"🔧 {line_bot.stock_label(sid)} 偵測到除權/分割"
+                          f"（{prev:g}→{now:g}）\n"
+                          f"  成本與停損基準已按比率調整，此跳空不是虧損")
+            continue
+        pos.at[i, "last_close"] = now
 
         # 除權息調整：持有期間配發的現金股利加回現價（含息報酬），
         # 除息缺口不會誤觸停損
@@ -165,6 +185,8 @@ def run():
             icon = "🛑" if ret < 0 else "💰"   # 移動停損出場多半是獲利了結
             alerts.append(f"{icon} {label}\n  {ret*100:+.1f}%（{r['entry_date']} 進場 {entry}）\n"
                           f"  觸發{stage}，建議出場")
+            if ret < 0:   # 虧損停損 → 之後連續追蹤提醒，不再「提醒一次就放生」
+                pos.at[i, "remind_left"] = SCREENER.get("stop_remind_days", 2)
         elif peak_ret >= trail_trig and r["status"] == "open":
             pos.at[i, "status"] = "target"   # 進入第三段，提醒一次
             watch_px = stop_line - div       # 換回市價基準的觀察價位
@@ -176,6 +198,34 @@ def run():
             pos.at[i, "exit_price"] = now
             pos.at[i, "ret_pct"]    = round(ret * 100, 2)
             alerts.append(f"⏳ {label}\n  持有滿 {max_days} 交易日結算：{ret*100:+.1f}%")
+
+    # ── 2.5 停損後連環提醒（2026-10 聯電：通知只發一次、未執行 → -37% 教訓）──
+    remind_days = SCREENER.get("stop_remind_days", 2)
+    if not quiet:
+        for i, r in pos.iterrows():
+            if r["status"] != "stopped":
+                continue
+            if str(r.get("exit_date", ""))[:8] == today:
+                continue   # 今天才停損的，停損通知剛發過，追蹤提醒從明天開始
+            left_raw = r.get("remind_left")
+            try:
+                left = int(float(left_raw)) if left_raw == left_raw and left_raw != "" else 0
+            except (TypeError, ValueError):
+                left = 0
+            if left <= 0:
+                continue
+            sid = str(r["stock_id"])
+            now = _last_close(sid)
+            if now <= 0:
+                continue   # 取價失敗，額度保留明天再提醒
+            entry = float(r["entry_price"])
+            nth   = remind_days - left + 1
+            alerts.append(
+                f"🔁 停損追蹤（{nth}/{remind_days}）{line_bot.stock_label(sid)}\n"
+                f"  已於 {str(r['exit_date'])[:8]} 觸發停損 {r['exit_price']}，"
+                f"現價 {now:g}（距進場 {(now-entry)/entry*100:+.1f}%）\n"
+                f"  若尚未出場請務必執行——截斷虧損是系統唯一的保命機制")
+            pos.at[i, "remind_left"] = left - 1
 
     # ── 3. 存檔 + 推播 ───────────────────────────────────────────────────
     POSITIONS_PATH.parent.mkdir(exist_ok=True)

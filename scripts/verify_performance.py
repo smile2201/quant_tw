@@ -112,8 +112,8 @@ def run():
     print(f"明細已存：{out_path}（{len(report)} 筆選股記錄）\n")
 
     # ── 摘要 ─────────────────────────────────────────────────────────────
-    print(f"{'層級':<6} {'期間':<6} {'樣本':>5} {'平均報酬':>8} {'勝率':>7} {'最佳':>7} {'最差':>7}")
-    print("─" * 55)
+    print(f"{'層級':<6} {'期間':<6} {'樣本':>5} {'平均報酬':>8} {'中位數':>7} {'勝率':>7} {'最佳':>7} {'最差':>7}")
+    print("─" * 64)
     for tier in TIERS:
         sub = report[report["tier"] == tier]
         for h in HORIZONS:
@@ -123,9 +123,10 @@ def run():
                 continue
             win = (valid > 0).mean() * 100
             print(f"{tier:<6} {h:>3}日 {len(valid):>5} "
-                  f"{valid.mean():>+7.2f}% {win:>6.1f}% "
+                  f"{valid.mean():>+7.2f}% {valid.median():>+6.2f}% {win:>6.1f}% "
                   f"{valid.max():>+6.1f}% {valid.min():>+6.1f}%")
         print()
+    print("⚠️ 平均數易被少數飆股拉高，判斷系統好壞請以中位數與勝率為主\n")
 
     # ── 抱到今天的成效（回答「推薦當天買、抱到現在」）─────────────────────
     print("═" * 55)

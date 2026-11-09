@@ -153,7 +153,17 @@ def fetch_market_regime() -> dict:
             desc = "🐻 大盤跌破季線"
         else:
             desc = "🐻 大盤季線下且下彎（空方，保守）"
-        return {"bull": bull, "desc": desc}
+
+        # 近 10 日報酬：急跌斷路器用（run_screener 據此暫停新倉）
+        ret_10d = None
+        if len(df) >= 11:
+            base10 = float(df["close"].iloc[-11])
+            if base10 > 0:
+                ret_10d = close / base10 - 1
+        from config.settings import SCREENER
+        if ret_10d is not None and ret_10d <= SCREENER.get("market_crash_10d", -0.07):
+            desc += f"｜🚨 10日 {ret_10d*100:+.1f}% 急跌，暫停新倉"
+        return {"bull": bull, "desc": desc, "ret_10d": ret_10d}
     except Exception as e:
         print(f"  [macro] 大盤濾網失敗：{e}")
         return {}
