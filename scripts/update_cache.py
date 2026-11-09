@@ -5,7 +5,7 @@ scripts/update_cache.py
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from data.finmind_fetcher import fetch_multiple, get_tw50_stocks
+from data.finmind_fetcher import fetch_multiple, get_screener_universe
 from data.twse_fetcher import fetch_material_news, fetch_company_info
 from config.settings import FINMIND_PLAN, FINMIND_PRICE_DATASET
 
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     fetch_material_news()
     fetch_company_info()
 
-    stocks = get_tw50_stocks()
+    stocks = get_screener_universe()
 
     print(f"\n=== 更新股價 cache（{FINMIND_PRICE_DATASET}）===")
     fetch_multiple(stocks, dataset=FINMIND_PRICE_DATASET)

@@ -29,6 +29,19 @@ jobs:
             echo "⚠️ 台灣時間 $TW_TIME 在靜音時段（22:00-08:00），分析正常執行，LINE 通知由早晨補發流程處理"
           fi
 
+      # FinMind cache 持久化：還原昨日 cache，當日只需增量補抓（省 API 配額）
+      # key 用 run_id 確保每次存新 entry（GitHub cache 不可覆寫）；
+      # restore-keys 前綴比對取最近一份舊 cache
+      - name: Restore FinMind cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/cache
+            data/empty_markers
+          key: finmind-cache-${{ github.run_id }}
+          restore-keys: |
+            finmind-cache-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

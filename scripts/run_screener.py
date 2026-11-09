@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 from config.settings import FINMIND_PRICE_DATASET
-from data.finmind_fetcher import fetch_stock, get_tw50_stocks
+from data.finmind_fetcher import fetch_stock, get_screener_universe
 from data.twse_fetcher import fetch_material_news, load_material_news
 from data.macro_fetcher import (fetch_vix, fetch_fed_rate, fetch_tw_futures_foreign,
                                 fetch_market_regime, build_context)
@@ -24,7 +24,7 @@ RESULTS_DIR_PATH.mkdir(exist_ok=True)
 
 
 def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
-    stock_ids = stock_ids or get_tw50_stocks()
+    stock_ids = stock_ids or get_screener_universe()
     today     = datetime.now().strftime("%Y%m%d")
 
     print(f"=== 選股評分 {today} ===")

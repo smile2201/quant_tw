@@ -107,6 +107,69 @@ def _fetch_from_api(dataset_name: str, stock_id: str,
     return pd.DataFrame()
 
 
+# 各 dataset 的「新鮮度容忍天數」：超過才做增量更新
+#   交易型（每日）→ 0：cache 未含今天就補；月營收 → 20；股利/財報（季/年）→ 55
+_FRESH_DAYS = {
+    "price": 0, "price_adj": 0, "institutional": 0, "margin": 0,
+    "revenue": 20, "dividend": 55, "financial": 55,
+}
+
+
+def _dedup_keys(df: pd.DataFrame) -> list:
+    """時序去重鍵：以 date 為主，三大法人一天多列再加 name"""
+    keys = [c for c in ["date"] if c in df.columns]
+    if "name" in df.columns:
+        keys.append("name")
+    return keys
+
+
+def _is_stale(cached: pd.DataFrame, fresh_days: int) -> bool:
+    """cache 最新日期距今是否超過容忍天數"""
+    if cached.empty or "date" not in cached.columns:
+        return False
+    try:
+        last = pd.to_datetime(cached["date"]).max().date()
+    except Exception:
+        return False
+    return (datetime.now().date() - last).days > fresh_days
+
+
+def _incremental_update(stock_id: str, dataset: str, dataset_name: str,
+                        cached: pd.DataFrame) -> pd.DataFrame:
+    """
+    增量補抓：只抓 cache 最後一天之後到今天的缺口，append 後去重存回。
+    任何一步失敗（API 空、網路錯）都回傳原 cache，不讓每日流程因補抓而中斷。
+    """
+    try:
+        last = pd.to_datetime(cached["date"]).max().date()
+    except Exception:
+        return cached
+
+    start = last + timedelta(days=1)
+    today = datetime.now().date()
+    if start > today:
+        return cached                       # cache 已含今天，不用補
+
+    new = _fetch_from_api(dataset_name, stock_id,
+                          start.isoformat(), today.isoformat())
+    if new.empty:
+        return cached                       # 假日/尚無新資料，保留 cache（非錯誤）
+
+    merged = pd.concat([cached, new], ignore_index=True)
+    keys = _dedup_keys(merged)
+    if keys:
+        merged = merged.drop_duplicates(subset=keys, keep="last")
+    if "date" in merged.columns:
+        merged = merged.sort_values("date").reset_index(drop=True)
+
+    try:
+        merged.to_parquet(_cache_path(stock_id, dataset), index=False)
+        print(f"  [incr] {stock_id}/{dataset} +{len(merged)-len(cached)} 筆（至 {today}）")
+    except Exception as e:
+        print(f"  [incr] {stock_id}/{dataset} 存檔失敗（用記憶體結果）：{e}")
+    return merged
+
+
 def fetch_stock(stock_id: str, dataset: str = "price",
                 force_refresh: bool = False) -> pd.DataFrame:
     """
@@ -126,9 +189,14 @@ def fetch_stock(stock_id: str, dataset: str = "price",
 
     cache_path = _cache_path(stock_id, dataset)
 
-    # 1. 已有 cache → 直接讀
+    # 1. 已有 cache → 讀回；有 token 且已過期時做增量補抓（只補缺口，省配額）
+    #    無 token（本機僅讀 cache）維持原行為：直接回 cache
     if not force_refresh and cache_path.exists():
-        return pd.read_parquet(cache_path)
+        cached = pd.read_parquet(cache_path)
+        fresh_days = _FRESH_DAYS.get(dataset, 1)
+        if FINMIND_TOKEN and _is_stale(cached, fresh_days):
+            return _incremental_update(stock_id, dataset, dataset_name, cached)
+        return cached
 
     # 2. empty marker → 跳過
     if not force_refresh and _is_empty_marked(stock_id, dataset):
@@ -192,6 +260,41 @@ def get_tw50_stocks() -> list:
         "1590", "3017", "6415", "8046", "2408",
         "2337", "3036", "2301", "2354", "2360",
     ]
+
+
+def get_mid100_stocks() -> list:
+    """
+    台灣中型100成分股（0051 追蹤標的；2026-11-06 名單，來源 wantgoo 0051 持股明細）
+    市值第 51~150 名：文獻上籌碼/營收訊號的 alpha 主要在中型股（大型股太有效率，
+    2026-11 樣本外體檢證實 TW50 內所有訊號無穩定預測力）。定期更新此名單。
+    """
+    return [
+        "2379", "3034", "3481", "1301", "3661", "3189", "2801", "1326", "2002", "5876",
+        "6770", "4938", "1101", "3044", "2313", "2409", "2376", "2404", "2615", "2207",
+        "2337", "1590", "3036", "6239", "3702", "5871", "3533", "2834", "6415", "2324",
+        "2356", "2618", "2912", "6213", "2347", "2609", "8996", "2377", "1605", "6805",
+        "1102", "1402", "6139", "2027", "6515", "2353", "2049", "2474", "5434", "2492",
+        "1504", "1560", "2812", "6257", "1519", "3706", "1476", "2610", "6919", "6531",
+        "3026", "6285", "6442", "8464", "2385", "2455", "3023", "9904", "1802", "7750",
+        "6409", "1513", "2354", "2105", "2542", "2633", "3006", "1717", "2451", "3005",
+        "1503", "3167", "5269", "7610", "9945", "6196", "1229", "6691", "8210", "6789",
+        "3030", "9910", "2467", "6949", "6526", "2646", "2838", "6781", "3532", "2645",
+    ]
+
+
+def get_screener_universe() -> list:
+    """選股池：依 SCREENER["universe"]（"tw50" 或 "tw50+mid100"）組合，去重保序"""
+    from config.settings import SCREENER
+    mode = SCREENER.get("universe", "tw50")
+    pool = get_tw50_stocks()
+    if "mid100" in mode:
+        pool += get_mid100_stocks()
+    seen, out = set(), []
+    for sid in pool:
+        if sid not in seen:
+            seen.add(sid)
+            out.append(sid)
+    return out
 
 
 if __name__ == "__main__":

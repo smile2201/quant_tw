@@ -36,6 +36,14 @@ pip install pandas pyarrow requests finmind pytest numpy
 - Cache 壞掉：刪除 data/cache/[dataset]/[stock_id].parquet 重跑
 - Empty marker 清除：刪除 data/empty_markers/[dataset]/[stock_id].empty
 
+### 增量補抓 + Actions 快取（2026-11-09，擴池到 135 檔後必要）
+- `fetch_stock` 有 cache 且有 token 時，只補「最後一天→今天」的缺口（_incremental_update），
+  不整段重抓。無 token（本機純讀 cache）維持原行為。
+- 新鮮度容忍：交易型(price/法人/融券)=0 天、月營收=20、股利/財報=55（_FRESH_DAYS）
+- daily_screener.yml 用 actions/cache 持久化 data/cache，昨日 cache 還原後當日只增量補抓，
+  把每日 ~800 次 API 壓到 ~135 次（避開 600/hr 退避）。key 用 run_id、restore-keys 前綴比對。
+- **首次跑**仍會整池抓（~800 次 → 一次 65 分鐘退避），之後穩定在增量模式。
+
 ---
 
 ## 三模式
