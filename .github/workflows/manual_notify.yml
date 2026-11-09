@@ -19,6 +19,7 @@ jobs:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
           LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
+          TOTAL_CAPITAL:      ${{ vars.TOTAL_CAPITAL }}
         run: |
           python - << 'PYEOF'
           import pandas as pd, sys, glob

@@ -117,6 +117,16 @@ def run(stock_ids: list = None, use_cached_news: bool = False) -> pd.DataFrame:
             print(f"   🚨 急跌斷路器：大盤10日 {ret_10d*100:+.1f}%，"
                   f"{n_crash} 檔強力候選降級，今日不開新倉")
 
+    # 負訊號否決器：兩期驗證皆負的「偽利多」訊號，強力候選帶單即降級
+    veto_kw = _SC.get("veto_signals", [])
+    if veto_kw:
+        mask_v = result["tier"].eq("強力候選") & result["chip_signals"].astype(str).apply(
+            lambda v: any(k in v for k in veto_kw))
+        if mask_v.any():
+            for sid in result.loc[mask_v, "stock_id"]:
+                print(f"   🚫 {sid} 帶否決訊號（{'/'.join(veto_kw)}），降為觀察股")
+            result.loc[mask_v, "tier"] = "觀察股"
+
     # 重複推薦冷卻：最近停損出場的股票，冷卻期內降級為觀察股
     # （防止下跌中的股票被反覆推薦——2026-07 智邦連推 3 次教訓）
     from config.settings import SCREENER, RESULTS_DIR

@@ -143,6 +143,27 @@ def _sig(row, col) -> str:
 WATCH_TOP_N = 10   # 觀察股只列分數前 N 檔，避免訊息變成一堵牆
 
 
+def _position_cap_line(close: float) -> str:
+    """部位上限換算：TOTAL_CAPITAL（總資金，元）有設定時，把 10% 上限換成具體張數
+    （2026-10 聯電單檔重壓虧幾十萬的教訓：規則要換算成數字才會被執行）"""
+    try:
+        capital = float(os.environ.get("TOTAL_CAPITAL", "0") or 0)
+    except ValueError:
+        capital = 0
+    if capital <= 0 or not close or close <= 0:
+        return ""
+    from config.settings import SCREENER
+    frac   = SCREENER.get("position_max_frac", 0.10)
+    budget = capital * frac
+    lots   = int(budget // (close * 1000))          # 1 張 = 1000 股
+    if lots >= 1:
+        return f"  📏 部位上限 {lots} 張（{frac*100:.0f}%資金≈{budget/10000:.0f}萬）"
+    shares = int(budget // close // 100) * 100       # 零股以百股計
+    if shares >= 100:
+        return f"  📏 部位上限 零股 {shares} 股（{frac*100:.0f}%資金）"
+    return f"  📏 1 張已超過{frac*100:.0f}%資金上限，建議零股或跳過"
+
+
 def _track_record_line() -> str:
     """系統真實成績單（讀 positions.csv）：每則通知自帶誠實數據，防止過度信任"""
     try:
@@ -203,6 +224,9 @@ def build_message(result_df, date: str) -> str:
             head += f"｜收 {close:g}"
             lines.append(head)
             lines.append(f"  🛑 停損參考 {close * (1 + stop_pct):.1f}")
+            cap_line = _position_cap_line(close)
+            if cap_line:
+                lines.append(cap_line)
         else:
             lines.append(head)
         lines.append(

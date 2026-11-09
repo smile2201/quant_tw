@@ -49,6 +49,7 @@ jobs:
           LINE_USER_ID:       ${{ secrets.LINE_USER_ID }}
           LINE_GROUP_ID:      ${{ secrets.LINE_GROUP_ID }}
           LINE_ALSO_USER:     ${{ vars.LINE_ALSO_USER }}
+          TOTAL_CAPITAL:      ${{ vars.TOTAL_CAPITAL }}
           NOTIFY_DATE:        ${{ steps.check.outputs.date }}
         run: |
           python - << 'PYEOF'

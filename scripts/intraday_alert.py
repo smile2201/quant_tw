@@ -104,6 +104,24 @@ def _check_positions_intraday() -> list:
             ret = (price - entry) / entry * 100
             warns.append(f"🛑 {stock_label(sid)}  {rt['price']}\n"
                          f"  盤中跌破{stage}（{stop_line - div:.1f}）{ret:+.1f}%，留意出場")
+
+    # 已停損但可能未執行的部位：盤中時段再提醒（2026-10 聯電停損未執行 -37% 教訓）
+    if "remind_left" in pos.columns:
+        for _, r in pos[pos["status"] == "stopped"].iterrows():
+            try:
+                left = int(float(r.get("remind_left") or 0))
+            except (TypeError, ValueError):
+                left = 0
+            if left <= 0:
+                continue
+            sid = str(r["stock_id"])
+            rt  = _get_realtime(sid)
+            if not rt or not rt.get("price"):
+                continue
+            entry = float(r["entry_price"])
+            warns.append(f"🔁 {stock_label(sid)} 已於 {str(r['exit_date'])[:8]} 觸發停損\n"
+                         f"  現價 {rt['price']}（距進場 {(rt['price']-entry)/entry*100:+.1f}%），"
+                         f"若尚未出場請把握盤中執行")
     return warns
 
 
